@@ -1,0 +1,237 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  annotations:
+    meta.helm.sh/release-name: emcp-prod-keycloak
+    meta.helm.sh/release-namespace: emcp-prod
+  creationTimestamp: "2025-02-18T07:55:12Z"
+  generation: 10
+  labels:
+    app.kubernetes.io/component: keycloak
+    app.kubernetes.io/instance: emcp-prod-keycloak
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/version: 26.1.0
+    helm.sh/chart: keycloak-24.4.6
+  name: emcp-prod-keycloak
+  namespace: emcp-prod
+  resourceVersion: "781341153"
+  uid: 63e30ee5-af7c-4bd1-b11f-e28b29897407
+spec:
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  podManagementPolicy: Parallel
+  replicas: 2
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: keycloak
+      app.kubernetes.io/instance: emcp-prod-keycloak
+      app.kubernetes.io/name: keycloak
+  serviceName: emcp-prod-keycloak-headless
+  template:
+    metadata:
+      annotations:
+        checksum/configmap-env-vars: 9a7a11d0b28849f3e5cf6c28cc1a3df5ef634ed67cc34f52e293e509b6638781
+        checksum/secrets: 79e317633cd529dfbe88c4f6d0165038e5613eb799a070f27d24232df796736b
+      creationTimestamp: null
+      labels:
+        app.kubernetes.io/app-version: 26.1.0
+        app.kubernetes.io/component: keycloak
+        app.kubernetes.io/instance: emcp-prod-keycloak
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/version: 26.1.0
+        helm.sh/chart: keycloak-24.4.6
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/instance: emcp-prod-keycloak
+                app.kubernetes.io/name: keycloak
+            topologyKey: kubernetes.io/hostname
+      automountServiceAccountToken: true
+      containers:
+      - env:
+        - name: KUBERNETES_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: BITNAMI_DEBUG
+          value: "false"
+        - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: admin-password
+              name: emcp-prod-keycloak
+        - name: KEYCLOAK_DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: keycloak-cnpg-user-secret
+        - name: KEYCLOAK_HTTP_RELATIVE_PATH
+          value: /
+        - name: KEYCLOAK_EXTRA_ARGS
+          value: --spi-email-template-provider=custom-freemarker
+        - name: KC_SPI_ADMIN_REALM
+          value: master
+        envFrom:
+        - configMapRef:
+            name: emcp-prod-keycloak-env-vars
+        image: harbor.enclaive.cloud/emcp/kc-provider:main-7ae19e9-dirty
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 3
+          initialDelaySeconds: 300
+          periodSeconds: 10
+          successThreshold: 1
+          tcpSocket:
+            port: http
+          timeoutSeconds: 5
+        name: keycloak
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        - containerPort: 8443
+          name: https
+          protocol: TCP
+        - containerPort: 7800
+          name: discovery
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /realms/master
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 90
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 3
+        resources:
+          limits:
+            cpu: "4"
+            ephemeral-storage: 2Gi
+            memory: 12Gi
+          requests:
+            cpu: "2"
+            ephemeral-storage: 50Mi
+            memory: 2Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: true
+          runAsGroup: 1001
+          runAsNonRoot: true
+          runAsUser: 1001
+          seLinuxOptions: {}
+          seccompProfile:
+            type: RuntimeDefault
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /tmp
+          name: empty-dir
+          subPath: tmp-dir
+        - mountPath: /bitnami/keycloak
+          name: empty-dir
+          subPath: app-volume-dir
+        - mountPath: /opt/bitnami/keycloak/conf
+          name: empty-dir
+          subPath: app-conf-dir
+        - mountPath: /opt/bitnami/keycloak/lib/quarkus
+          name: empty-dir
+          subPath: app-quarkus-dir
+        - mountPath: /opt/bitnami/keycloak/data
+          name: empty-dir
+          subPath: app-data-dir
+        - mountPath: /opt/bitnami/keycloak/providers
+          name: empty-dir
+          subPath: app-providers-dir
+        - mountPath: /opt/bitnami/keycloak/certs
+          name: certificates
+          readOnly: true
+      dnsPolicy: ClusterFirst
+      enableServiceLinks: true
+      initContainers:
+      - args:
+        - -ec
+        - |
+          . /opt/bitnami/scripts/liblog.sh
+
+          info "Copying writable dirs to empty dir"
+          # In order to not break the application functionality we need to make some
+          # directories writable, so we need to copy it to an empty dir volume
+          cp -r --preserve=mode /opt/bitnami/keycloak/lib/quarkus /emptydir/app-quarkus-dir
+          cp -r --preserve=mode /opt/bitnami/keycloak/data /emptydir/app-data-dir
+          cp -r --preserve=mode /opt/bitnami/keycloak/providers /emptydir/app-providers-dir
+          info "Copy operation completed"
+        command:
+        - /bin/bash
+        image: harbor.enclaive.cloud/emcp/kc-provider:main-7ae19e9-dirty
+        imagePullPolicy: IfNotPresent
+        name: prepare-write-dirs
+        resources:
+          limits:
+            cpu: "4"
+            ephemeral-storage: 2Gi
+            memory: 12Gi
+          requests:
+            cpu: "2"
+            ephemeral-storage: 50Mi
+            memory: 2Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: true
+          runAsGroup: 1001
+          runAsNonRoot: true
+          runAsUser: 1001
+          seLinuxOptions: {}
+          seccompProfile:
+            type: RuntimeDefault
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /emptydir
+          name: empty-dir
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: Always
+      serviceAccount: emcp-prod-keycloak
+      serviceAccountName: emcp-prod-keycloak
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - emptyDir: {}
+        name: empty-dir
+      - name: certificates
+        secret:
+          defaultMode: 420
+          secretName: emcp-prod-keycloak-crt
+  updateStrategy:
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate
+status:
+  availableReplicas: 2
+  collisionCount: 0
+  currentReplicas: 2
+  currentRevision: emcp-prod-keycloak-bc4f76679
+  observedGeneration: 10
+  readyReplicas: 2
+  replicas: 2
+  updateRevision: emcp-prod-keycloak-bc4f76679
+  updatedReplicas: 2

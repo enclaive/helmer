@@ -1,0 +1,5 @@
+# Values specific to prod environment
+
+replicaCount: 2
+
+# Override service-specific configurations here

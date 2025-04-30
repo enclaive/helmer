@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"apps/v1","kind":"StatefulSet","metadata":{"annotations":{},"name":"admin","namespace":"emcp-prod"},"spec":{"replicas":2,"selector":{"matchLabels":{"app":"admin"}},"serviceName":"admin","template":{"metadata":{"labels":{"app":"admin"}},"spec":{"containers":[{"image":"harbor.enclaive.cloud/emcp/admin:main-40b0261","livenessProbe":{"failureThreshold":10,"httpGet":{"path":"/","port":3000},"initialDelaySeconds":10,"periodSeconds":3},"name":"admin","ports":[{"containerPort":3000,"name":"web"}],"readinessProbe":{"failureThreshold":10,"httpGet":{"path":"/","port":3000},"initialDelaySeconds":10,"periodSeconds":3},"resources":{"limits":{"cpu":1,"memory":"4Gi"},"requests":{"cpu":1,"memory":"4Gi"}}}]}}}}
+  creationTimestamp: "2024-06-06T15:56:20Z"
+  generation: 24
+  name: admin
+  namespace: emcp-prod
+  resourceVersion: "780688839"
+  uid: e928ce65-7b15-4fca-8e92-c2cc7c5761b1
+spec:
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  podManagementPolicy: OrderedReady
+  replicas: 2
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: admin
+  serviceName: admin
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: admin
+    spec:
+      containers:
+      - image: harbor.enclaive.cloud/emcp/admin:main-40b0261
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 10
+          httpGet:
+            path: /
+            port: 3000
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 3
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: admin
+        ports:
+        - containerPort: 3000
+          name: web
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 10
+          httpGet:
+            path: /
+            port: 3000
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 3
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources:
+          limits:
+            cpu: "1"
+            memory: 4Gi
+          requests:
+            cpu: "1"
+            memory: 4Gi
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+  updateStrategy:
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate
+status:
+  availableReplicas: 2
+  collisionCount: 0
+  currentReplicas: 2
+  currentRevision: admin-6bb6dcdb56
+  observedGeneration: 24
+  readyReplicas: 2
+  replicas: 2
+  updateRevision: admin-6bb6dcdb56
+  updatedReplicas: 2

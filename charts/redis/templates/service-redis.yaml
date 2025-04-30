@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","kind":"Service","metadata":{"annotations":{},"labels":{"app":"redis"},"name":"redis","namespace":"emcp-prod"},"spec":{"ipFamilyPolicy":"PreferDualStack","ports":[{"name":"redis","port":6379}],"selector":{"app":"redis"}}}
+  labels:
+    app: redis
+  name: redis
+  namespace: {{ .Release.Namespace }}
+spec:
+  clusterIP: 10.106.10.79
+  clusterIPs:
+    - 10.106.10.79
+    - 2001:db8:42:1::f305
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+    - IPv4
+    - IPv6
+  ipFamilyPolicy: PreferDualStack
+  ports:
+    - name: redis
+      port: 6379
+      protocol: TCP
+      targetPort: 6379
+  selector:
+    app: redis
+  sessionAffinity: None
+  type: ClusterIP

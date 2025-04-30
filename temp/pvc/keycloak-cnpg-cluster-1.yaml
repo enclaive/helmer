@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  annotations:
+    cnpg.io/nodeSerial: "1"
+    cnpg.io/operatorVersion: 1.24.0
+    cnpg.io/pvcStatus: ready
+    pv.kubernetes.io/bind-completed: "yes"
+    pv.kubernetes.io/bound-by-controller: "yes"
+    volume.beta.kubernetes.io/storage-provisioner: driver.longhorn.io
+    volume.kubernetes.io/storage-provisioner: driver.longhorn.io
+  creationTimestamp: "2025-03-04T15:12:46Z"
+  finalizers:
+  - kubernetes.io/pvc-protection
+  labels:
+    cnpg.io/cluster: keycloak-cnpg-cluster
+    cnpg.io/instanceName: keycloak-cnpg-cluster-1
+    cnpg.io/instanceRole: primary
+    cnpg.io/pvcRole: PG_DATA
+    role: primary
+  name: keycloak-cnpg-cluster-1
+  namespace: emcp-prod
+  ownerReferences:
+  - apiVersion: postgresql.cnpg.io/v1
+    controller: true
+    kind: Cluster
+    name: keycloak-cnpg-cluster
+    uid: bb8e3b04-4c32-4071-920e-41a8a79c1a6f
+  resourceVersion: "653274894"
+  uid: 7dd8f68e-706c-4ff3-a9fc-e2cee0fee118
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 8Gi
+  storageClassName: longhorn
+  volumeMode: Filesystem
+  volumeName: pvc-7dd8f68e-706c-4ff3-a9fc-e2cee0fee118
+status:
+  accessModes:
+  - ReadWriteOnce
+  capacity:
+    storage: 8Gi
+  phase: Bound

@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  annotations:
+    pv.kubernetes.io/bind-completed: "yes"
+    pv.kubernetes.io/bound-by-controller: "yes"
+    volume.beta.kubernetes.io/storage-provisioner: driver.longhorn.io
+    volume.kubernetes.io/storage-provisioner: driver.longhorn.io
+  creationTimestamp: "2024-06-06T11:09:16Z"
+  finalizers:
+  - kubernetes.io/pvc-protection
+  labels:
+    app: redis
+    recurring-job-group.longhorn.io/default: enabled
+  name: redis-redis-0
+  namespace: emcp-prod
+  resourceVersion: "556403288"
+  uid: c5ddf640-a364-4f9c-a98b-bad18b570d88
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: longhorn
+  volumeMode: Filesystem
+  volumeName: pvc-c5ddf640-a364-4f9c-a98b-bad18b570d88
+status:
+  accessModes:
+  - ReadWriteOnce
+  capacity:
+    storage: 1Gi
+  phase: Bound
