@@ -1,0 +1,5 @@
+# Values specific to staging environment
+
+replicaCount: 1
+
+# Override service-specific configurations here

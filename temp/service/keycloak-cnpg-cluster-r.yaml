@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    cnpg.io/operatorVersion: 1.24.0
+  creationTimestamp: "2025-03-04T15:12:46Z"
+  labels:
+    cnpg.io/cluster: keycloak-cnpg-cluster
+  name: keycloak-cnpg-cluster-r
+  namespace: emcp-prod
+  ownerReferences:
+  - apiVersion: postgresql.cnpg.io/v1
+    controller: true
+    kind: Cluster
+    name: keycloak-cnpg-cluster
+    uid: bb8e3b04-4c32-4071-920e-41a8a79c1a6f
+  resourceVersion: "653273820"
+  uid: 76c07bf2-dfb8-422e-a0be-3bf5a0d929d3
+spec:
+  clusterIP: 10.97.229.139
+  clusterIPs:
+  - 10.97.229.139
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - name: postgres
+    port: 5432
+    protocol: TCP
+    targetPort: 5432
+  selector:
+    cnpg.io/cluster: keycloak-cnpg-cluster
+    cnpg.io/podRole: instance
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}

@@ -1,0 +1,34 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"networking.k8s.io/v1","kind":"Ingress","metadata":{"annotations":{"cert-manager.io/cluster-issuer":"letsencrypt"},"name":"backend","namespace":"emcp-prod"},"spec":{"ingressClassName":"public","rules":[{"host":"emcp-prod.enclaive.cloud","http":{"paths":[{"backend":{"service":{"name":"backend","port":{"number":8080}}},"path":"/","pathType":"Prefix"}]}}],"tls":[{"hosts":["emcp-prod.enclaive.cloud"],"secretName":"backend-ingress-tls"}]}}
+  creationTimestamp: "2024-06-06T11:09:16Z"
+  generation: 1
+  name: backend
+  namespace: emcp-prod
+  resourceVersion: "671781685"
+  uid: 80c9b3e5-26da-4ec1-8cf3-1536a785cfec
+spec:
+  ingressClassName: public
+  rules:
+  - host: emcp-prod.enclaive.cloud
+    http:
+      paths:
+      - backend:
+          service:
+            name: backend
+            port:
+              number: 8080
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - emcp-prod.enclaive.cloud
+    secretName: backend-ingress-tls
+status:
+  loadBalancer:
+    ingress:
+    - ip: 185.112.181.201

@@ -1,0 +1,51 @@
+# Default values for redis
+# This is a YAML-formatted file.
+
+replicaCount: 1
+
+image:
+  repository: harbor.enclaive.cloud/emcp/redis
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: harbor-creds
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+securityContext: {}
+
+service:
+  type: ClusterIP
+  port: 80
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+persistence:
+  enabled: false
+  storageClass: "longhorn"
+  size: 5Gi
+
+# Environment-specific configurations should be in environments/[env].yaml
