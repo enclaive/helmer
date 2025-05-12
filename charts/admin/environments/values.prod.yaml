@@ -1,10 +1,33 @@
-    namespace: emcp-prod                                                           
-    domain: prod.emcp.com                                                       
-    replicaCount: 2 # more replicas than dev                                       
+# charts/admin/environments/values.prod.yaml
+namespace: emcp-prod                                                           
+domain: prod.emcp.com                                                       
+replicaCount: 2                                       
                                                                                   
-    image: 
-      repository: harbor.enclaive.cloud/emcp/admin                                                                       
-      tag: "prod-latest"                                                           
+image: 
+  repository: harbor.enclaive.cloud/emcp/admin                                                                       
+  tag: "prod-latest"                                                           
                                                                                   
-    persistence:                                                                  
-      size: 512Mi  # Smaller volume in dev 
+persistence:                                                                  
+  size: 5Gi  # Larger volume for production
+
+# Client-specific configurations
+ingress:
+  additionalHosts:
+    - host: govtech.admin.enclaive.cloud
+      paths:
+        - path: /
+          pathType: Prefix
+    - host: prianto.admin.enclaive.cloud
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: admin-ingress-tls
+      hosts:
+        - admin.{{ .Values.domain }}
+    - secretName: admin-govtech-ingress-tls
+      hosts:
+        - govtech.admin.enclaive.cloud
+    - secretName: admin-prianto-ingress-tls
+      hosts:
+        - prianto.admin.enclaive.cloud

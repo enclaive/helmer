@@ -1,5 +1,5 @@
-    namespace: emcp-dev                                                           
-    domain: dev.example.com                                                       
+    namespace: emcp-staging                                                           
+    domain: staging.emcp.admin.com                                                       
     replicaCount: 1 # Fewer replicas in dev                                       
                                                                                   
     image:                                                                        

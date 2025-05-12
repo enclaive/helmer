@@ -1,5 +1,11 @@
+# charts/admin/values.yaml
 # Default values for admin
 # This is a YAML-formatted file.
+
+# Environment-specific values should be defined in environments/[env].yaml
+namespace: default
+
+domain: admin.enclaive.cloud
 
 replicaCount: 1
 
@@ -14,28 +20,42 @@ imagePullSecrets:
 nameOverride: ""
 fullnameOverride: ""
 
-serviceAccount:
-  create: true
-  annotations: {}
-  name: ""
+service:
+  type: ClusterIP
+  port: 3000
+  targetPort: 3000
+  # clusterIP should be left empty for new deployments
+  # clusterIP: null
+
+ingress:
+  enabled: true
+  className: public
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+  hosts:
+    - host: "admin.{{ .Values.domain }}"
+      paths:
+        - path: /
+          pathType: Prefix
+  additionalHosts: []
+  tls:
+    - secretName: admin-ingress-tls
+      hosts:
+        - "admin.{{ .Values.domain }}"
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
 
 podAnnotations: {}
 
 podSecurityContext: {}
 
 securityContext: {}
-
-service:
-  type: ClusterIP
-  port: 80
-
-resources:
-  limits:
-    cpu: 1000m
-    memory: 1Gi
-  requests:
-    cpu: 100m
-    memory: 256Mi
 
 nodeSelector: {}
 
@@ -44,8 +64,16 @@ tolerations: []
 affinity: {}
 
 persistence:
-  enabled: false
+  enabled: true
   storageClass: "longhorn"
   size: 5Gi
 
-# Environment-specific configurations should be in environments/[env].yaml
+probes:
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 3
+    failureThreshold: 10
+  readiness:
+    initialDelaySeconds: 10
+    periodSeconds: 3
+    failureThreshold: 10

@@ -1,32 +1,27 @@
+# charts/admin/templates/service-admin.yaml
 apiVersion: v1
 kind: Service
 metadata:
-  annotations:
-    kubectl.kubernetes.io/last-applied-configuration: |
-      {"apiVersion":"v1","kind":"Service","metadata":{"annotations":{},"labels":{"app":"admin"},"name":"admin","namespace":"emcp-prod"},"spec":{"ports":[{"name":"web","port":3000}],"selector":{"app":"admin"}}}
-  creationTimestamp: "2024-06-06T15:56:20Z"
+  name: admin
+  namespace: {{ .Values.namespace }}
   labels:
     app: admin
-  name: admin
-  namespace: {{ .Values.namespace }}  
-  resourceVersion: "49560256"
-  uid: f4521fef-c67e-4bfc-a95a-a1e36b7bf579
 spec:
-  clusterIP: {{ .Values.clusterIP }}  
+  type: {{ .Values.service.type }}
+  {{- if .Values.service.clusterIP }}
+  clusterIP: {{ .Values.service.clusterIP }}
   clusterIPs:
-  - {{ .Values.clusterIP }}
+  - {{ .Values.service.clusterIP }}
+  {{- end }}
   internalTrafficPolicy: Cluster
   ipFamilies:
   - IPv4
   ipFamilyPolicy: SingleStack
   ports:
   - name: web
-    port: {{ .Values.port }}
+    port: {{ .Values.service.port }}
     protocol: TCP
-    targetPort: {{ .Values.targetPort }}
+    targetPort: {{ .Values.service.targetPort }}
   selector:
     app: admin
   sessionAffinity: None
-  type: ClusterIP
-status:
-  loadBalancer: {}

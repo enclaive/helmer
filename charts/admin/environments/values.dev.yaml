@@ -1,5 +1,5 @@
     namespace: emcp-dev                                                           
-    domain: dev.emcp.com                                                       
+    domain: dev.emcp.admin.com                                                       
     replicaCount: 1 # Fewer replicas in dev                                       
                                                                                   
     image:
