@@ -1,0 +1,10 @@
+    namespace: emcp-prod                                                           
+    domain: prod.emcp.com                                                       
+    replicaCount: 2 # more replicas than dev                                       
+                                                                                  
+    image: 
+      repository: harbor.enclaive.cloud/emcp/admin                                                                       
+      tag: "prod-latest"                                                           
+                                                                                  
+    persistence:                                                                  
+      size: 512Mi  # Smaller volume in dev 

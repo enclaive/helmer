@@ -4,24 +4,29 @@ metadata:
   annotations:
     kubectl.kubernetes.io/last-applied-configuration: |
       {"apiVersion":"v1","kind":"Service","metadata":{"annotations":{},"labels":{"app":"admin"},"name":"admin","namespace":"emcp-prod"},"spec":{"ports":[{"name":"web","port":3000}],"selector":{"app":"admin"}}}
+  creationTimestamp: "2024-06-06T15:56:20Z"
   labels:
     app: admin
   name: admin
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ .Values.namespace }}  
+  resourceVersion: "49560256"
+  uid: f4521fef-c67e-4bfc-a95a-a1e36b7bf579
 spec:
-  clusterIP: 10.104.183.44
+  clusterIP: {{ .Values.clusterIP }}  
   clusterIPs:
-    - 10.104.183.44
+  - {{ .Values.clusterIP }}
   internalTrafficPolicy: Cluster
   ipFamilies:
-    - IPv4
+  - IPv4
   ipFamilyPolicy: SingleStack
   ports:
-    - name: web
-      port: 3000
-      protocol: TCP
-      targetPort: 3000
+  - name: web
+    port: {{ .Values.port }}
+    protocol: TCP
+    targetPort: {{ .Values.targetPort }}
   selector:
     app: admin
   sessionAffinity: None
   type: ClusterIP
+status:
+  loadBalancer: {}
