@@ -1,5 +1,0 @@
-# Values specific to dev environment
-
-replicaCount: 1
-
-# Override service-specific configurations here

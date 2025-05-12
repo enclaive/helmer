@@ -1,0 +1,10 @@
+    namespace: emcp-dev                                                           
+    domain: dev.emcp.com                                                       
+    replicaCount: 1 # Fewer replicas in dev                                       
+                                                                                  
+    image:
+      repository: harbor.enclaive.cloud/emcp/admin
+      tag: "dev-latest"                                                           
+                                                                                  
+    persistence:                                                                  
+      size: 512Mi  # Smaller volume in dev 
