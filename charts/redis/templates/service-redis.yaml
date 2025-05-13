@@ -7,17 +7,6 @@ metadata:
     app: redis
 spec:
   type: {{ .Values.service.type }}
-  {{- if .Values.service.clusterIP }}
-  clusterIP: {{ .Values.service.clusterIP }}
-  clusterIPs:
-  - {{ .Values.service.clusterIP }}
-  {{- end }}
-  ipFamilyPolicy: {{ .Values.service.ipFamilyPolicy }}
-  ipFamilies:
-    - IPv4
-    {{- if eq .Values.service.ipFamilyPolicy "PreferDualStack" }}
-    - IPv6
-    {{- end }}
   ports:
     - name: redis
       port: {{ .Values.service.port }}
