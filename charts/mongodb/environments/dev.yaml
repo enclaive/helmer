@@ -10,3 +10,4 @@ persistence:
 # In dev, disable backups to save resources
 backup:
   enabled: false
+  

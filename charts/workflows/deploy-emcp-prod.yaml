@@ -1,31 +1,77 @@
-name: Deploy to EMCP Production
+name: Deploy to EKS
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, dev, staging ]
     paths:
       - 'charts/admin/**'
       - 'charts/mongodb/**'
       - 'charts/redis/**'
-      - '.github/workflows/deploy-emcp-prod.yml'
+      - '.github/workflows/deploy-to-eks.yml'
   workflow_dispatch: # This allows manual triggering of the workflow
+    inputs:
+      environment:
+        description: 'Environment to deploy to (dev, staging, prod)'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
 
 env:
-  AWS_REGION: eu-central-1 # Change to your AWS region
-  EKS_CLUSTER_NAME: emcp-production # Change to your cluster name
-  NAMESPACE: emcp-prod
+  AWS_REGION: eu-central-1
+  EKS_CLUSTER_NAME: emcp-eks-cluster
 
 jobs:
+  set-environment:
+    name: Set Environment
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.set-env.outputs.environment }}
+      namespace: ${{ steps.set-env.outputs.namespace }}
+    
+    steps:
+      - name: Set environment based on branch or input
+        id: set-env
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            # For manual runs, use the provided input
+            ENVIRONMENT="${{ github.event.inputs.environment }}"
+          else
+            # For push events, use the branch name
+            if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+              ENVIRONMENT="prod"
+            elif [ "${{ github.ref }}" == "refs/heads/staging" ]; then
+              ENVIRONMENT="staging"
+            elif [ "${{ github.ref }}" == "refs/heads/dev" ]; then
+              ENVIRONMENT="dev"
+            else
+              echo "Unsupported branch for deployment: ${{ github.ref }}"
+              exit 1
+            fi
+          fi
+          
+          # Set environment and namespace
+          echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
+          echo "namespace=emcp-$ENVIRONMENT" >> $GITHUB_OUTPUT
+          
+          echo "Selected environment: $ENVIRONMENT"
+          echo "Using namespace: emcp-$ENVIRONMENT"
+
   deploy:
     name: Deploy to EKS
     runs-on: ubuntu-latest
+    needs: set-environment
+    environment: ${{ needs.set-environment.outputs.environment }}
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
         
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -38,62 +84,99 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v3
         with:
-          version: 'v3.10.0'
+          version: 'v3.12.0'
           
       - name: Configure Docker credentials for Helm
         run: |
+          kubectl create namespace ${{ needs.set-environment.outputs.namespace }} --dry-run=client -o yaml | kubectl apply -f -
+          
           kubectl create secret docker-registry harbor-creds \
             --docker-server=harbor.enclaive.cloud \
             --docker-username=${{ secrets.HARBOR_USERNAME }} \
             --docker-password=${{ secrets.HARBOR_PASSWORD }} \
-            --namespace=${{ env.NAMESPACE }} \
+            --namespace=${{ needs.set-environment.outputs.namespace }} \
             --dry-run=client -o yaml | kubectl apply -f -
+      
+      - name: Set image tags based on environment
+        id: set-tags
+        run: |
+          ENV="${{ needs.set-environment.outputs.environment }}"
+          
+          if [ "$ENV" == "prod" ]; then
+            ADMIN_TAG="prod-${{ github.sha }}"
+            MONGODB_TAG="5.0.2"
+            REDIS_TAG="6.2-alpine"
+          elif [ "$ENV" == "staging" ]; then
+            ADMIN_TAG="staging-${{ github.sha }}"
+            MONGODB_TAG="5.0.2"
+            REDIS_TAG="6.2-alpine"
+          elif [ "$ENV" == "dev" ]; then
+            ADMIN_TAG="dev-${{ github.sha }}"
+            MONGODB_TAG="5.0.2"
+            REDIS_TAG="6.2-alpine"
+          fi
+          
+          echo "admin_tag=$ADMIN_TAG" >> $GITHUB_OUTPUT
+          echo "mongodb_tag=$MONGODB_TAG" >> $GITHUB_OUTPUT
+          echo "redis_tag=$REDIS_TAG" >> $GITHUB_OUTPUT
         
       - name: Deploy MongoDB
         run: |
           helm upgrade --install mongodb ./charts/mongodb \
-            --namespace ${{ env.NAMESPACE }} \
+            --namespace ${{ needs.set-environment.outputs.namespace }} \
             --create-namespace \
-            --values ./charts/mongodb/environments/values.prod.yaml \
-            --set image.tag=${{ github.sha }} \
+            --values ./charts/mongodb/environments/values.${{ needs.set-environment.outputs.environment }}.yaml \
+            --set image.tag=${{ steps.set-tags.outputs.mongodb_tag }} \
             --atomic \
             --timeout 5m
             
       - name: Deploy Redis
         run: |
           helm upgrade --install redis ./charts/redis \
-            --namespace ${{ env.NAMESPACE }} \
+            --namespace ${{ needs.set-environment.outputs.namespace }} \
             --create-namespace \
-            --values ./charts/redis/environments/values.prod.yaml \
-            --set image.tag=${{ github.sha }} \
+            --values ./charts/redis/environments/values.${{ needs.set-environment.outputs.environment }}.yaml \
+            --set image.tag=${{ steps.set-tags.outputs.redis_tag }} \
             --atomic \
             --timeout 5m
       
       - name: Deploy Admin
         run: |
           helm upgrade --install admin ./charts/admin \
-            --namespace ${{ env.NAMESPACE }} \
+            --namespace ${{ needs.set-environment.outputs.namespace }} \
             --create-namespace \
-            --values ./charts/admin/environments/values.prod.yaml \
-            --set image.tag=prod-${{ github.sha }} \
+            --values ./charts/admin/environments/values.${{ needs.set-environment.outputs.environment }}.yaml \
+            --set image.tag=${{ steps.set-tags.outputs.admin_tag }} \
             --atomic \
             --timeout 5m
       
       - name: Verify deployments
         run: |
-          kubectl rollout status statefulset/mongodb -n ${{ env.NAMESPACE }} --timeout=300s
-          kubectl rollout status statefulset/redis -n ${{ env.NAMESPACE }} --timeout=300s
-          kubectl rollout status statefulset/admin -n ${{ env.NAMESPACE }} --timeout=300s
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          
+          echo "Verifying MongoDB deployment..."
+          kubectl rollout status statefulset/mongodb -n $NAMESPACE --timeout=300s
+          
+          echo "Verifying Redis deployment..."
+          kubectl rollout status statefulset/redis -n $NAMESPACE --timeout=300s
+          
+          echo "Verifying Admin deployment..."
+          kubectl rollout status statefulset/admin -n $NAMESPACE --timeout=300s
           
       - name: Report deployment status
         if: always()
         run: |
-          echo "=== Deployment Status ==="
-          echo "MongoDB: $(kubectl get statefulset mongodb -n ${{ env.NAMESPACE }} -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
-          echo "Redis: $(kubectl get statefulset redis -n ${{ env.NAMESPACE }} -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
-          echo "Admin: $(kubectl get statefulset admin -n ${{ env.NAMESPACE }} -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          
+          echo "=== Deployment Status for ${{ needs.set-environment.outputs.environment }} ==="
+          echo "MongoDB: $(kubectl get statefulset mongodb -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
+          echo "Redis: $(kubectl get statefulset redis -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
+          echo "Admin: $(kubectl get statefulset admin -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
           
           echo "=== Pod Status ==="
-          kubectl get pods -n ${{ env.NAMESPACE }} -l app=mongodb
-          kubectl get pods -n ${{ env.NAMESPACE }} -l app=redis
-          kubectl get pods -n ${{ env.NAMESPACE }} -l app=admin
+          kubectl get pods -n $NAMESPACE -l app=mongodb
+          kubectl get pods -n $NAMESPACE -l app=redis
+          kubectl get pods -n $NAMESPACE -l app=admin
+          
+          echo "=== Service Status ==="
+          kubectl get services -n $NAMESPACE
