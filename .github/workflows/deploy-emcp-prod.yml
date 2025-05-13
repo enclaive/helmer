@@ -22,7 +22,7 @@ on:
 
 env:
   AWS_REGION: eu-central-1
-  EKS_CLUSTER_NAME: emcp-test
+  EKS_CLUSTER_NAME: emcp-eks-cluster
   NAMESPACE: emcp-prod
   # Use more specific image tags
   MONGODB_TAG: "5.0.2"
