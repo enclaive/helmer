@@ -135,7 +135,7 @@ jobs:
           helm upgrade --install mongodb ./charts/mongodb \
             --namespace ${{ needs.set-environment.outputs.namespace }} \
             --create-namespace \
-            --values ./charts/mongodb/environments/values.${{ needs.set-environment.outputs.environment }}.yaml \
+            --values ./charts/mongodb/environments/${{ needs.set-environment.outputs.environment }}.yaml \
             --set image.tag=${{ steps.set-tags.outputs.mongodb_tag }} \
             --set imagePullSecrets[0].name=harbor-creds \
             --atomic \
@@ -146,7 +146,7 @@ jobs:
           helm upgrade --install redis ./charts/redis \
             --namespace ${{ needs.set-environment.outputs.namespace }} \
             --create-namespace \
-            --values ./charts/redis/environments/values.${{ needs.set-environment.outputs.environment }}.yaml \
+            --values ./charts/redis/environments/${{ needs.set-environment.outputs.environment }}.yaml \
             --set image.tag=${{ steps.set-tags.outputs.redis_tag }} \
             --set imagePullSecrets[0].name=harbor-creds \
             --atomic \
@@ -157,7 +157,7 @@ jobs:
           helm upgrade --install admin ./charts/admin \
             --namespace ${{ needs.set-environment.outputs.namespace }} \
             --create-namespace \
-            --values ./charts/admin/environments/values.${{ needs.set-environment.outputs.environment }}.yaml \
+            --values ./charts/admin/environments/${{ needs.set-environment.outputs.environment }}.yaml \
             --set image.tag=${{ steps.set-tags.outputs.admin_tag }} \
             --set imagePullSecrets[0].name=harbor-creds \
             --atomic \
