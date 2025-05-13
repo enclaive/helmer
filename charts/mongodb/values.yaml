@@ -1,11 +1,11 @@
 # Default values for mongodb
-# This is a YAML-formatted file.
+namespace: default
 
 replicaCount: 1
 
 image:
-  repository: harbor.enclaive.cloud/emcp/mongodb
-  tag: latest
+  repository: mongo
+  tag: "5.0.2"
   pullPolicy: IfNotPresent
 
 imagePullSecrets:
@@ -14,25 +14,26 @@ imagePullSecrets:
 nameOverride: ""
 fullnameOverride: ""
 
-serviceAccount:
-  create: true
-  annotations: {}
-  name: ""
-
-podAnnotations: {}
-
-podSecurityContext: {}
-
-securityContext: {}
-
 service:
   type: ClusterIP
-  port: 80
+  port: 27017
+  targetPort: 27017
 
+# MongoDB credentials
+auth:
+  rootUsername: root
+  rootPassword: root
+  # For production, use secretRef
+  # secretRef:
+  #   name: mongodb-credentials
+  #   userKey: username
+  #   passwordKey: password
+
+# Minimal resources to save costs
 resources:
   limits:
-    cpu: 1000m
-    memory: 1Gi
+    cpu: 300m
+    memory: 512Mi
   requests:
     cpu: 100m
     memory: 256Mi
@@ -44,8 +45,18 @@ tolerations: []
 affinity: {}
 
 persistence:
-  enabled: false
+  enabled: true
   storageClass: "longhorn"
-  size: 5Gi
+  size: 1Gi
 
-# Environment-specific configurations should be in environments/[env].yaml
+# Backup configuration - minimal approach
+backup:
+  enabled: true
+  # Schedule in cron format
+  schedule: "0 2 * * 0"  # Only once per week on Sunday at 2am
+  # Number of days to keep backups
+  retentionDays: 7
+  # Database to backup
+  database: backend_db
+  # Cleanup cron schedule
+  cleanupSchedule: "0 3 * * 0"  # Every Sunday at 3am

@@ -1,5 +1,12 @@
-# Values specific to dev environment
-
+namespace: emcp-dev
 replicaCount: 1
 
-# Override service-specific configurations here
+image:
+  tag: "5.0.2"
+
+persistence:
+  size: 1Gi
+
+# In dev, disable backups to save resources
+backup:
+  enabled: false

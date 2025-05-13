@@ -1,5 +1,8 @@
-# Values specific to staging environment
-
+namespace: emcp-staging
 replicaCount: 1
 
-# Override service-specific configurations here
+image:
+  tag: "6.2-alpine"
+
+persistence:
+  size: 512Mi

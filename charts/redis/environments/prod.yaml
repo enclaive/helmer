@@ -1,5 +1,8 @@
-# Values specific to prod environment
+namespace: emcp-prod
+replicaCount: 1  # Reduced to 1 to minimize costs
 
-replicaCount: 2
+image:
+  tag: "6.2-alpine"
 
-# Override service-specific configurations here
+persistence:
+  size: 512Mi # Slightly larger for production

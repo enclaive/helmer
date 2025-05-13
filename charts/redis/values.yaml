@@ -1,11 +1,11 @@
 # Default values for redis
-# This is a YAML-formatted file.
+namespace: default
 
 replicaCount: 1
 
 image:
-  repository: harbor.enclaive.cloud/emcp/redis
-  tag: latest
+  repository: redis
+  tag: "6.2-alpine"  # Using Alpine for smaller image size
   pullPolicy: IfNotPresent
 
 imagePullSecrets:
@@ -14,28 +14,21 @@ imagePullSecrets:
 nameOverride: ""
 fullnameOverride: ""
 
-serviceAccount:
-  create: true
-  annotations: {}
-  name: ""
-
-podAnnotations: {}
-
-podSecurityContext: {}
-
-securityContext: {}
-
 service:
   type: ClusterIP
-  port: 80
+  port: 6379
+  targetPort: 6379
+  # Optional: Set ipFamilyPolicy configuration if needed
+  ipFamilyPolicy: SingleStack  # Changed to SingleStack to reduce complexity
 
+# Minimal resources to save costs
 resources:
   limits:
-    cpu: 1000m
-    memory: 1Gi
-  requests:
-    cpu: 100m
+    cpu: 200m
     memory: 256Mi
+  requests:
+    cpu: 50m
+    memory: 128Mi
 
 nodeSelector: {}
 
@@ -44,8 +37,14 @@ tolerations: []
 affinity: {}
 
 persistence:
-  enabled: false
+  enabled: true
   storageClass: "longhorn"
-  size: 5Gi
+  size: 512Mi  # Minimal storage to reduce costs
+
+# Redis configuration options
+redis:
+  config:
+    maxmemory: 200mb
+    maxmemoryPolicy: allkeys-lru
 
 # Environment-specific configurations should be in environments/[env].yaml

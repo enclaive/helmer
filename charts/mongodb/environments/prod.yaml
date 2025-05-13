@@ -1,5 +1,14 @@
-# Values specific to prod environment
+namespace: emcp-prod
+replicaCount: 1
 
-replicaCount: 2
+image:
+  tag: "5.0.2"
 
-# Override service-specific configurations here
+persistence:
+  size: 2Gi  # Slightly larger for production
+
+# More frequent backups for production
+backup:
+  enabled: true
+  schedule: "0 2 * * 0,3"  # Twice a week
+  retentionDays: 7

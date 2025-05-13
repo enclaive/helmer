@@ -1,5 +1,14 @@
-# Values specific to staging environment
-
+namespace: emcp-staging
 replicaCount: 1
 
-# Override service-specific configurations here
+image:
+  tag: "5.0.2"
+
+persistence:
+  size: 1Gi
+
+# Less frequent backups in staging
+backup:
+  enabled: true
+  schedule: "0 2 * * 0"  # Once per week
+  retentionDays: 3
