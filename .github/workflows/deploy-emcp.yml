@@ -88,7 +88,16 @@ jobs:
         with:
           version: 'v3.12.0'
           
-      - name: Configure Docker credentials for Helm
+      # Harbor login using the docker/login-action to align with the other workflow
+      - name: Login to Harbor
+        uses: docker/login-action@v3
+        with:
+          registry: harbor.enclaive.cloud
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+          
+      # Still create the Kubernetes secret for Harbor credentials
+      - name: Create Harbor credentials secret in Kubernetes
         run: |
           # Create the secret
           kubectl create secret docker-registry harbor-creds \
@@ -128,6 +137,7 @@ jobs:
             --create-namespace \
             --values ./charts/mongodb/environments/values.${{ needs.set-environment.outputs.environment }}.yaml \
             --set image.tag=${{ steps.set-tags.outputs.mongodb_tag }} \
+            --set imagePullSecrets[0].name=harbor-creds \
             --atomic \
             --timeout 5m
             
@@ -138,6 +148,7 @@ jobs:
             --create-namespace \
             --values ./charts/redis/environments/values.${{ needs.set-environment.outputs.environment }}.yaml \
             --set image.tag=${{ steps.set-tags.outputs.redis_tag }} \
+            --set imagePullSecrets[0].name=harbor-creds \
             --atomic \
             --timeout 5m
       
@@ -148,6 +159,7 @@ jobs:
             --create-namespace \
             --values ./charts/admin/environments/values.${{ needs.set-environment.outputs.environment }}.yaml \
             --set image.tag=${{ steps.set-tags.outputs.admin_tag }} \
+            --set imagePullSecrets[0].name=harbor-creds \
             --atomic \
             --timeout 5m
       
