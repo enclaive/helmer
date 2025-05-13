@@ -1,0 +1,99 @@
+name: Deploy to EMCP Production
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'charts/admin/**'
+      - 'charts/mongodb/**'
+      - 'charts/redis/**'
+      - '.github/workflows/deploy-emcp-prod.yml'
+  workflow_dispatch: # This allows manual triggering of the workflow
+
+env:
+  AWS_REGION: eu-central-1 # Change to your AWS region
+  EKS_CLUSTER_NAME: emcp-production # Change to your cluster name
+  NAMESPACE: emcp-prod
+
+jobs:
+  deploy:
+    name: Deploy to EKS
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
+          
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'v3.10.0'
+          
+      - name: Configure Docker credentials for Helm
+        run: |
+          kubectl create secret docker-registry harbor-creds \
+            --docker-server=harbor.enclaive.cloud \
+            --docker-username=${{ secrets.HARBOR_USERNAME }} \
+            --docker-password=${{ secrets.HARBOR_PASSWORD }} \
+            --namespace=${{ env.NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+        
+      - name: Deploy MongoDB
+        run: |
+          helm upgrade --install mongodb ./charts/mongodb \
+            --namespace ${{ env.NAMESPACE }} \
+            --create-namespace \
+            --values ./charts/mongodb/environments/values.prod.yaml \
+            --set image.tag=${{ github.sha }} \
+            --atomic \
+            --timeout 5m
+            
+      - name: Deploy Redis
+        run: |
+          helm upgrade --install redis ./charts/redis \
+            --namespace ${{ env.NAMESPACE }} \
+            --create-namespace \
+            --values ./charts/redis/environments/values.prod.yaml \
+            --set image.tag=${{ github.sha }} \
+            --atomic \
+            --timeout 5m
+      
+      - name: Deploy Admin
+        run: |
+          helm upgrade --install admin ./charts/admin \
+            --namespace ${{ env.NAMESPACE }} \
+            --create-namespace \
+            --values ./charts/admin/environments/values.prod.yaml \
+            --set image.tag=prod-${{ github.sha }} \
+            --atomic \
+            --timeout 5m
+      
+      - name: Verify deployments
+        run: |
+          kubectl rollout status statefulset/mongodb -n ${{ env.NAMESPACE }} --timeout=300s
+          kubectl rollout status statefulset/redis -n ${{ env.NAMESPACE }} --timeout=300s
+          kubectl rollout status statefulset/admin -n ${{ env.NAMESPACE }} --timeout=300s
+          
+      - name: Report deployment status
+        if: always()
+        run: |
+          echo "=== Deployment Status ==="
+          echo "MongoDB: $(kubectl get statefulset mongodb -n ${{ env.NAMESPACE }} -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
+          echo "Redis: $(kubectl get statefulset redis -n ${{ env.NAMESPACE }} -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
+          echo "Admin: $(kubectl get statefulset admin -n ${{ env.NAMESPACE }} -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
+          
+          echo "=== Pod Status ==="
+          kubectl get pods -n ${{ env.NAMESPACE }} -l app=mongodb
+          kubectl get pods -n ${{ env.NAMESPACE }} -l app=redis
+          kubectl get pods -n ${{ env.NAMESPACE }} -l app=admin
