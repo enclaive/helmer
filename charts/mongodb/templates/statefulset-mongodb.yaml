@@ -1,9 +1,6 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  annotations:
-    kubectl.kubernetes.io/last-applied-configuration: |
-      {"apiVersion":"apps/v1","kind":"StatefulSet","metadata":{"annotations":{},"name":"mongodb","namespace":"emcp-prod"},"spec":{"replicas":1,"selector":{"matchLabels":{"app":"mongodb"}},"serviceName":"mongodb","template":{"metadata":{"labels":{"app":"mongodb"}},"spec":{"containers":[{"env":[{"name":"MONGO_INITDB_ROOT_USERNAME","value":"root"},{"name":"MONGO_INITDB_ROOT_PASSWORD","value":"root"}],"image":"mongo:5.0.2","name":"mongodb","ports":[{"containerPort":27017,"name":"mongodb"}],"volumeMounts":[{"mountPath":"/data/db","name":"mongodb"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"mongodb"},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"5Gi"}},"storageClassName":"longhorn"}}]}}
   name: mongodb
   namespace: {{ .Release.Namespace }}
 spec:
@@ -11,7 +8,7 @@ spec:
     whenDeleted: Retain
     whenScaled: Retain
   podManagementPolicy: OrderedReady
-  replicas: 1
+  replicas: {{ .Values.replicaCount }}
   revisionHistoryLimit: 10
   selector:
     matchLabels:
@@ -19,25 +16,27 @@ spec:
   serviceName: mongodb
   template:
     metadata:
-      creationTimestamp: null
       labels:
         app: mongodb
     spec:
+      # Add Harbor image pull secrets
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
       containers:
         - env:
             - name: MONGO_INITDB_ROOT_USERNAME
-              value: root
+              value: {{ .Values.auth.rootUsername }}
             - name: MONGO_INITDB_ROOT_PASSWORD
-              value: root
-          imagePullPolicy: IfNotPresent
+              value: {{ .Values.auth.rootPassword }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           name: mongodb
           ports:
             - containerPort: 27017
               name: mongodb
               protocol: TCP
-          resources: {}
-          terminationMessagePath: /dev/termination-log
-          terminationMessagePolicy: File
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
             - mountPath: /data/db
               name: mongodb
@@ -54,13 +53,12 @@ spec:
     - apiVersion: v1
       kind: PersistentVolumeClaim
       metadata:
-        creationTimestamp: null
         name: mongodb
       spec:
         accessModes:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 5Gi
-        storageClassName: longhorn
+            storage: {{ .Values.persistence.size }}
+        storageClassName: {{ .Values.persistence.storageClass }}
         volumeMode: Filesystem

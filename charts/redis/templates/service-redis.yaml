@@ -6,6 +6,7 @@ metadata:
   labels:
     app: redis
 spec:
+  # Remove any hardcoded ClusterIP if present
   type: {{ .Values.service.type }}
   ports:
     - name: redis
@@ -15,3 +16,6 @@ spec:
   selector:
     app: redis
   sessionAffinity: None
+  ipFamilyPolicy: SingleStack
+  ipFamilies:
+    - IPv4
