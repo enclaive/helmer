@@ -20,7 +20,7 @@ on:
 
 env:
   AWS_REGION: eu-central-1
-  EKS_CLUSTER_NAME: emcp-eks-cluster
+  EKS_CLUSTER_NAME: emcp-eks-cluster-config
 
 jobs:
   set-environment:

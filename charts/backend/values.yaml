@@ -45,7 +45,7 @@ affinity: {}
 
 persistence:
   enabled: false
-  storageClass: "longhorn"
+  storageClass: "ebs-sc"
   size: 5Gi
 
 # Environment-specific configurations should be in environments/[env].yaml

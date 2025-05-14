@@ -95,5 +95,5 @@ spec:
         resources:
           requests:
             storage: {{ .Values.persistence.size | default "1Gi" }}
-        storageClassName: {{ .Values.persistence.storageClass | default "longhorn" }}
+        storageClassName: {{ .Values.persistence.storageClass | default "ebs-sc" }}
   {{- end }}
