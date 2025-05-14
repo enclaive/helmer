@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: admin-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: admin
+    {{- include "admin.labels" . | nindent 4 }}
+data:
+  # Base configuration for Admin service
+  config.json: |
+    {
+      "environment": "{{ .Values.environment | default "production" }}",
+      "domain": "{{ .Values.domain }}",
+      "api": {
+        "timeout": 30000,
+        "retries": 3
+      },
+      "features": {
+        "enableCache": true,
+        "enableCompression": true
+      },
+      "logging": {
+        "level": "{{ .Values.logging.level | default "info" }}",
+        "format": "{{ .Values.logging.format | default "json" }}"
+      }
+    }
+  
+  # Additional configuration can be added here

@@ -9,44 +9,54 @@ NAMESPACE="emcp-prod"
 # Ensure namespace exists
 ensure_namespace "$NAMESPACE"
 
-# MongoDB deployment with extended timeout
-echo "Deploying MongoDB..."
-helm upgrade --install mongodb ./charts/mongodb \
+# Deploy Backend service with extended timeout
+echo "Deploying Backend service..."
+helm upgrade --install backend ./charts/backend \
   --namespace "$NAMESPACE" \
   --create-namespace \
-  --values ./charts/mongodb/environments/prod.yaml \
-  --set image.tag="${MONGODB_TAG:-5.0.2}" \
+  --values ./charts/backend/environments/prod.yaml \
+  --set image.tag="${BACKEND_TAG:-prod-latest}" \
   --set imagePullSecrets[0].name=harbor-creds \
+  --set environment=production \
+  --set logging.level=info \
+  --set features.enableBackups=true \
   --timeout 15m \
   --wait \
   --debug
 
 # Check deployment status
-check_status "statefulset" "mongodb" "$NAMESPACE"
+check_status "statefulset" "backend" "$NAMESPACE"
 
-# Redis deployment
-echo "Deploying Redis..."
-helm upgrade --install redis ./charts/redis \
+# Deploy Frontend service
+echo "Deploying Frontend service..."
+helm upgrade --install frontend ./charts/frontend \
   --namespace "$NAMESPACE" \
   --create-namespace \
-  --values ./charts/redis/environments/prod.yaml \
-  --set image.tag="${REDIS_TAG:-6.2-alpine}" \
+  --values ./charts/frontend/environments/prod.yaml \
+  --set image.tag="${FRONTEND_TAG:-prod-latest}" \
   --set imagePullSecrets[0].name=harbor-creds \
-  --timeout 10m \
+  --set environment=production \
+  --set api.url="https://emcp-prod.enclaive.cloud" \
+  --set app.url="https://console.enclaive.cloud" \
+  --set features.enableBetaFeatures=false \
+  --timeout 15m \
   --wait
 
 # Check deployment status
-check_status "statefulset" "redis" "$NAMESPACE"
+check_status "statefulset" "frontend" "$NAMESPACE"
 
-# Admin deployment
-echo "Deploying Admin..."
+# Deploy Admin service
+echo "Deploying Admin service..."
 helm upgrade --install admin ./charts/admin \
   --namespace "$NAMESPACE" \
   --create-namespace \
   --values ./charts/admin/environments/prod.yaml \
   --set image.tag="${ADMIN_TAG:-prod-latest}" \
   --set imagePullSecrets[0].name=harbor-creds \
-  --timeout 10m \
+  --set environment=production \
+  --set logging.level=info \
+  --set logging.format=json \
+  --timeout 15m \
   --wait
 
 # Check deployment status
