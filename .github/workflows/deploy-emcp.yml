@@ -139,6 +139,8 @@ jobs:
       # Make the deployment scripts executable
       - name: Make deployment scripts executable
         run: |
+          mkdir -p k8s
+          cp .github/workflows/k8s/* k8s/
           chmod +x k8s/*.sh
           
       # Run the appropriate deployment script based on the environment
