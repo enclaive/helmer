@@ -136,32 +136,60 @@ jobs:
           echo "FRONTEND_TAG=$FRONTEND_TAG" >> $GITHUB_ENV
           echo "BACKEND_TAG=$BACKEND_TAG" >> $GITHUB_ENV
         
-      # Make the deployment scripts executable
-      - name: Make deployment scripts executable
+      # Fix template issues in admin chart
+      - name: Fix Admin Chart Template Issues
         run: |
-          mkdir -p k8s
-          cp .github/workflows/k8s/* k8s/
-          chmod +x k8s/*.sh
+          # Check statefulset-admin.yaml for template errors
+          ADMIN_STATEFULSET_FILE="charts/admin/templates/statefulset-admin.yaml"
           
-      # Deploy Admin service
-      - name: Deploy Admin Service
+          if [ -f "$ADMIN_STATEFULSET_FILE" ]; then
+            echo "Fixing template issues in Admin chart..."
+            
+            # Replace incorrect backend.labels references with admin.labels
+            sed -i 's/backend\.labels/admin.labels/g' $ADMIN_STATEFULSET_FILE
+            
+            # Check for other potential template issues
+            echo "Content of fixed file:"
+            cat $ADMIN_STATEFULSET_FILE
+          else
+            echo "Admin statefulset template file not found. Checking other issues."
+          fi
+          
+          # Check if there are other template files with similar issues
+          grep -r "backend\.labels\|backend\.selectorLabels" charts/admin/templates/ || echo "No other backend references found"
+          
+      # Deploy Backend service
+      - name: Deploy Backend Service
         run: |
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           ENV="${{ needs.set-environment.outputs.environment }}"
           
-          echo "Deploying Admin service..."
-          helm upgrade --install admin ./charts/admin \
+          # Set logging level and features based on environment
+          if [ "$ENV" == "prod" ]; then
+            LOG_LEVEL="info"
+            ENABLE_BACKUPS="true"
+          elif [ "$ENV" == "staging" ]; then
+            LOG_LEVEL="info"
+            ENABLE_BACKUPS="true"
+          elif [ "$ENV" == "dev" ]; then
+            LOG_LEVEL="debug"
+            ENABLE_BACKUPS="false"
+          fi
+          
+          echo "Deploying Backend service..."
+          helm upgrade --install backend ./charts/backend \
             --namespace "$NAMESPACE" \
             --create-namespace \
-            --values ./charts/admin/environments/values.$ENV.yaml \
-            --set image.tag="${ADMIN_TAG}" \
+            --values ./charts/backend/environments/$ENV.yaml \
+            --set image.tag="${BACKEND_TAG}" \
             --set imagePullSecrets[0].name=harbor-creds \
             --set environment=$ENV \
-            --set namespace=$NAMESPACE \
-            --timeout 10m \
+            --set logging.level=$LOG_LEVEL \
+            --set features.enableBackups=$ENABLE_BACKUPS \
+            --timeout 15m \
             --wait
           
-          echo "Admin service deployed"
+          echo "Backend service deployed"
           
       # Deploy Frontend service
       - name: Deploy Frontend Service
@@ -200,52 +228,38 @@ jobs:
           
           echo "Frontend service deployed"
           
-      # Deploy Backend service
-      - name: Deploy Backend Service
+      # Deploy Admin service
+      - name: Deploy Admin Service
         run: |
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           ENV="${{ needs.set-environment.outputs.environment }}"
           
-          # Set logging level and features based on environment
-          if [ "$ENV" == "prod" ]; then
-            LOG_LEVEL="info"
-            ENABLE_BACKUPS="true"
-          elif [ "$ENV" == "staging" ]; then
-            LOG_LEVEL="info"
-            ENABLE_BACKUPS="true"
-          elif [ "$ENV" == "dev" ]; then
-            LOG_LEVEL="debug"
-            ENABLE_BACKUPS="false"
-          fi
-          
-          echo "Deploying Backend service..."
-          helm upgrade --install backend ./charts/backend \
+          echo "Deploying Admin service..."
+          helm upgrade --install admin ./charts/admin \
             --namespace "$NAMESPACE" \
             --create-namespace \
-            --values ./charts/backend/environments/$ENV.yaml \
-            --set image.tag="${BACKEND_TAG}" \
+            --values ./charts/admin/environments/values.$ENV.yaml \
+            --set image.tag="${ADMIN_TAG}" \
             --set imagePullSecrets[0].name=harbor-creds \
             --set environment=$ENV \
-            --set logging.level=$LOG_LEVEL \
-            --set features.enableBackups=$ENABLE_BACKUPS \
-            --timeout 15m \
-            --wait \
-            --debug
+            --set namespace=$NAMESPACE \
+            --timeout 10m \
+            --wait
           
-          echo "Backend service deployed"
+          echo "Admin service deployed"
           
       - name: Verify deployments
         run: |
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
-          echo "Verifying Admin deployment..."
-          kubectl rollout status statefulset/admin -n $NAMESPACE --timeout=300s || true
+          echo "Verifying Backend deployment..."
+          kubectl rollout status statefulset/backend -n $NAMESPACE --timeout=300s || true
           
           echo "Verifying Frontend deployment..."
           kubectl rollout status statefulset/frontend -n $NAMESPACE --timeout=300s || true
           
-          echo "Verifying Backend deployment..."
-          kubectl rollout status statefulset/backend -n $NAMESPACE --timeout=300s || true
+          echo "Verifying Admin deployment..."
+          kubectl rollout status statefulset/admin -n $NAMESPACE --timeout=300s || true
           
       - name: Report deployment status
         if: always()
@@ -253,14 +267,14 @@ jobs:
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
           echo "=== Deployment Status for ${{ needs.set-environment.outputs.environment }} ==="
-          echo "Admin: $(kubectl get statefulset admin -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
-          echo "Frontend: $(kubectl get statefulset frontend -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
           echo "Backend: $(kubectl get statefulset backend -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
+          echo "Frontend: $(kubectl get statefulset frontend -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
+          echo "Admin: $(kubectl get statefulset admin -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
           
           echo "=== Pod Status ==="
-          kubectl get pods -n $NAMESPACE -l app=admin
-          kubectl get pods -n $NAMESPACE -l app=frontend
           kubectl get pods -n $NAMESPACE -l app=backend
+          kubectl get pods -n $NAMESPACE -l app=frontend
+          kubectl get pods -n $NAMESPACE -l app=admin
           
           echo "=== Service Status ==="
           kubectl get services -n $NAMESPACE
