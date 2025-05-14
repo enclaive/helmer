@@ -47,8 +47,8 @@ affinity: {}
 
 persistence:
   enabled: true
-  storageClass: "longhorn"
-  size: 5Gi
+  storageClass: "gp2"  # Change from "longhorn" to "gp2"
+  size: 1Gi
 
 probes:
   liveness:

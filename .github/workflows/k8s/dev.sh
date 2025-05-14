@@ -20,6 +20,7 @@ helm upgrade --install backend ./charts/backend \
   --set environment=dev \
   --set logging.level=debug \
   --set features.enableBackups=false \
+  --set persistence.storageClass=gp2 \
   --timeout 10m \
   --wait \
   --debug
