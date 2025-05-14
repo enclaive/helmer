@@ -8,6 +8,7 @@ on:
       - 'charts/mongodb/**'
       - 'charts/redis/**'
       - '.github/workflows/deploy-emcp.yml'
+      - 'k8s/**'
   workflow_dispatch:
     inputs:
       environment:
@@ -96,7 +97,7 @@ jobs:
           username: ${{ secrets.HARBOR_USERNAME }}
           password: ${{ secrets.HARBOR_PASSWORD }}
           
-      # Still create the Kubernetes secret for Harbor credentials
+      # Create the Harbor credentials secret in Kubernetes
       - name: Create Harbor credentials secret in Kubernetes
         run: |
           # Create the secret
@@ -129,40 +130,35 @@ jobs:
           echo "admin_tag=$ADMIN_TAG" >> $GITHUB_OUTPUT
           echo "mongodb_tag=$MONGODB_TAG" >> $GITHUB_OUTPUT
           echo "redis_tag=$REDIS_TAG" >> $GITHUB_OUTPUT
+          
+          # Export tags as environment variables for the deployment scripts
+          echo "ADMIN_TAG=$ADMIN_TAG" >> $GITHUB_ENV
+          echo "MONGODB_TAG=$MONGODB_TAG" >> $GITHUB_ENV
+          echo "REDIS_TAG=$REDIS_TAG" >> $GITHUB_ENV
         
-      - name: Deploy MongoDB
+      # Make the deployment scripts executable
+      - name: Make deployment scripts executable
         run: |
-          helm upgrade --install mongodb ./charts/mongodb \
-            --namespace ${{ needs.set-environment.outputs.namespace }} \
-            --create-namespace \
-            --values ./charts/mongodb/environments/${{ needs.set-environment.outputs.environment }}.yaml \
-            --set image.tag=${{ steps.set-tags.outputs.mongodb_tag }} \
-            --set imagePullSecrets[0].name=harbor-creds \
-            --atomic \
-            --timeout 5m
-            
-      - name: Deploy Redis
+          chmod +x k8s/*.sh
+          
+      # Run the appropriate deployment script based on the environment
+      - name: Deploy to ${{ needs.set-environment.outputs.environment }}
+        env:
+          NAMESPACE: ${{ needs.set-environment.outputs.namespace }}
         run: |
-          helm upgrade --install redis ./charts/redis \
-            --namespace ${{ needs.set-environment.outputs.namespace }} \
-            --create-namespace \
-            --values ./charts/redis/environments/${{ needs.set-environment.outputs.environment }}.yaml \
-            --set image.tag=${{ steps.set-tags.outputs.redis_tag }} \
-            --set imagePullSecrets[0].name=harbor-creds \
-            --atomic \
-            --timeout 5m
-      
-      - name: Deploy Admin
-        run: |
-          helm upgrade --install admin ./charts/admin \
-            --namespace ${{ needs.set-environment.outputs.namespace }} \
-            --create-namespace \
-            --values ./charts/admin/environments/${{ needs.set-environment.outputs.environment }}.yaml \
-            --set image.tag=${{ steps.set-tags.outputs.admin_tag }} \
-            --set imagePullSecrets[0].name=harbor-creds \
-            --atomic \
-            --timeout 5m
-      
+          ENV="${{ needs.set-environment.outputs.environment }}"
+          
+          if [ "$ENV" == "prod" ]; then
+            # Use the production deployment script
+            k8s/prod.sh
+          elif [ "$ENV" == "staging" ]; then
+            # Use the staging deployment script
+            k8s/staging.sh
+          elif [ "$ENV" == "dev" ]; then
+            # Use the development deployment script
+            k8s/dev.sh
+          fi
+          
       - name: Verify deployments
         run: |
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"

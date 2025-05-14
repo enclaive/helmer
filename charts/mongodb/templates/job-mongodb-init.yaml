@@ -1,0 +1,59 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mongodb-init
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+  labels:
+    app: mongodb
+    {{- include "mongodb.labels" . | nindent 4 }}
+spec:
+  backoffLimit: 5
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: mongodb-init
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: mongodb-init
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              # Wait for MongoDB to become available
+              echo "Waiting for MongoDB to become available..."
+              until mongo --host mongodb.{{ .Release.Namespace }}.svc.cluster.local --port 27017 -u {{ .Values.auth.rootUsername }} -p {{ .Values.auth.rootPassword }} --authenticationDatabase admin --eval "db.adminCommand('ping')" &>/dev/null; do
+                echo "MongoDB not yet available, waiting..."
+                sleep 5
+              done
+              
+              echo "MongoDB is available, initializing database..."
+              
+              # Create a database and test collection
+              mongo --host mongodb.{{ .Release.Namespace }}.svc.cluster.local --port 27017 -u {{ .Values.auth.rootUsername }} -p {{ .Values.auth.rootPassword }} --authenticationDatabase admin <<EOF
+              use backend_db
+              db.createCollection("initialization_test")
+              db.initialization_test.insertOne({ message: "MongoDB initialized successfully", timestamp: new Date() })
+              print("Database initialization completed successfully")
+              EOF
+              
+              echo "MongoDB initialization script completed"
+          resources:
+            limits:
+              cpu: 200m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+      restartPolicy: OnFailure
+      terminationGracePeriodSeconds: 30
