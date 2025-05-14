@@ -150,7 +150,7 @@ jobs:
           --set imagePullSecrets[0].name=harbor-creds \
           --set logging.level=debug \
           --set logging.format=pretty \
-          --set persistence.storageClass=gp2-immediate \
+          --set persistence.storageClass=ebs-sc \
           --set persistence.size=1Gi \
           --debug \
           --timeout 10m \
