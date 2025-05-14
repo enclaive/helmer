@@ -141,18 +141,20 @@ jobs:
           
           echo "Deploying Admin service..."
           helm upgrade --install admin ./charts/admin \
-            --namespace "$NAMESPACE" \
-            --create-namespace \
-            --set namespace=$NAMESPACE \
-            --set domain=admin.enclaive.cloud \
-            --set environment=$ENV \
-            --set image.tag="${ADMIN_TAG}" \
-            --set imagePullSecrets[0].name=harbor-creds \
-            --set logging.level=$LOG_LEVEL \
-            --set logging.format=$LOG_FORMAT \
-            --debug \
-            --timeout 10m \
-            --wait
+          --namespace emcp-dev \
+          --create-namespace \
+          --set namespace=emcp-dev \
+          --set domain=admin.enclaive.cloud \
+          --set environment=dev \
+          --set image.tag="dev-latest" \
+          --set imagePullSecrets[0].name=harbor-creds \
+          --set logging.level=debug \
+          --set logging.format=pretty \
+          --set persistence.storageClass=gp2-immediate \
+          --set persistence.size=1Gi \
+          --debug \
+          --timeout 10m \
+          --wait
           
           echo "Admin service deployed"
           
