@@ -24,24 +24,10 @@ service:
   type: ClusterIP
   port: 3000
   targetPort: 3000
-  # clusterIP should be left empty for new deployments
-  # clusterIP: null
 
+# Disable ingress for now
 ingress:
-  enabled: true
-  className: public
-  annotations:
-    cert-manager.io/cluster-issuer: letsencrypt
-  hosts:
-    - host: "admin.{{ .Values.domain }}"
-      paths:
-        - path: /
-          pathType: Prefix
-  additionalHosts: []
-  tls:
-    - secretName: admin-ingress-tls
-      hosts:
-        - "admin.{{ .Values.domain }}"
+  enabled: false
 
 resources:
   limits:
@@ -77,3 +63,8 @@ probes:
     initialDelaySeconds: 10
     periodSeconds: 3
     failureThreshold: 10
+
+# Default logging configuration
+logging:
+  level: "info"
+  format: "json"
