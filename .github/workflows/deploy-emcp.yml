@@ -153,9 +153,6 @@ jobs:
           --set persistence.enabled=true \
           --set persistence.storageClass=gp2 \
           --set persistence.size=1Gi \
-          --set "tolerations[0].key=CriticalAddonsOnly" \
-          --set "tolerations[0].operator=Exists" \
-          --set "tolerations[0].effect=NoSchedule" \
           --force \
           --debug \
           --timeout 10m \
