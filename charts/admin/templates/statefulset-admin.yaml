@@ -1,62 +1,86 @@
-apiVersion: v1
-kind: ConfigMap
+apiVersion: apps/v1
+kind: StatefulSet
 metadata:
-  name: backend-config
-  namespace: {{ .Release.Namespace }}
+  name: admin
+  namespace: {{ .Values.namespace }}
   labels:
-    app: backend
-    {{- include "backend.labels" . | nindent 4 }}
-data:
-  # Configuration settings for the backend service
-  settings.json: |
-    {
-      "app": {
-        "name": "Enclaive Backend",
-        "env": "{{ .Values.environment | default "production" }}",
-        "logLevel": "{{ .Values.logging.level | default "info" }}"
-      },
-      "server": {
-        "port": 8080,
-        "timeout": 60000,
-        "cors": {
-          "enabled": true,
-          "origins": ["https://admin-{{ .Values.environment }}.enclaive.cloud", "https://console.enclaive.cloud"]
-        }
-      },
-      "database": {
-        "mongodb": {
-          "uri": "mongodb://{{ .Values.mongodb.username }}:{{ .Values.mongodb.password }}@{{ .Values.mongodb.host }}:{{ .Values.mongodb.port }}/{{ .Values.mongodb.database }}",
-          "options": {
-            "useNewUrlParser": true,
-            "useUnifiedTopology": true,
-            "retryWrites": true,
-            "w": "majority"
-          }
-        },
-        "redis": {
-          "host": "{{ .Values.redis.host }}",
-          "port": {{ .Values.redis.port }}
-        }
-      },
-      "security": {
-        "rateLimiting": {
-          "enabled": true,
-          "maxRequests": 100,
-          "timeWindow": 60000
-        }
-      },
-      "metrics": {
-        "enabled": true,
-        "path": "/metrics"
-      }
-    }
-  
-  # Application-level configuration
-  app-config.json: |
-    {
-      "features": {
-        "enableBackups": {{ .Values.features.enableBackups | default true }},
-        "enableWebhooks": {{ .Values.features.enableWebhooks | default true }},
-        "enableCaching": {{ .Values.features.enableCaching | default true }}
-      }
-    }
+    app: admin
+    {{- include "admin.labels" . | nindent 4 }}
+spec:
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  podManagementPolicy: OrderedReady
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: admin
+  serviceName: admin
+  template:
+    metadata:
+      labels:
+        app: admin
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap-admin.yaml") . | sha256sum | quote }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: admin
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: NODE_ENV
+              value: {{ .Values.environment | default "production" }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds | default 30 }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds | default 10 }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold | default 6 }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds | default 10 }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds | default 5 }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold | default 3 }}
+          ports:
+            - containerPort: 3000
+              name: web
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - mountPath: /app/config
+              name: config-volume
+            {{- if .Values.persistence.enabled }}
+            - mountPath: /app/data
+              name: admin-data
+            {{- end }}
+      volumes:
+        - name: config-volume
+          configMap:
+            name: admin-config
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- if .
