@@ -83,4 +83,17 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-  {{- if .
+  {{- if .Values.persistence.enabled }}
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: admin-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size | default "1Gi" }}
+        storageClassName: {{ .Values.persistence.storageClass | default "longhorn" }}
+  {{- end }}
