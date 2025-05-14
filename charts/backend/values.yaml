@@ -45,7 +45,7 @@ affinity: {}
 
 persistence:
   enabled: false
-  storageClass: "ebs-sc"
+  storageClass: "gp2"
   size: 5Gi
 
 # Environment-specific configurations should be in environments/[env].yaml

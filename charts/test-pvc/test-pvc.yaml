@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: test-ebs-pvc
+  name: test-gp2-pvc
   namespace: emcp-dev
 spec:
   accessModes:
@@ -9,4 +9,4 @@ spec:
   resources:
     requests:
       storage: 100Mi
-  storageClassName: ebs-sc
+  storageClassName: gp2

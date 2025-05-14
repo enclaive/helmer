@@ -47,7 +47,7 @@ affinity: {}
 
 persistence:
   enabled: true
-  storageClass: "ebs-sc"  # Change from "longhorn" to "gp2"
+  storageClass: "gp2"  
   size: 1Gi
 
 probes:
