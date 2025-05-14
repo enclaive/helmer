@@ -5,8 +5,8 @@ on:
     branches: [ main, dev, staging ]
     paths:
       - 'charts/admin/**'
-      - 'charts/mongodb/**'
-      - 'charts/redis/**'
+      - 'charts/frontend/**'
+      - 'charts/backend/**'
       - '.github/workflows/deploy-emcp.yml'
       - 'k8s/**'
   workflow_dispatch:
@@ -115,26 +115,26 @@ jobs:
           
           if [ "$ENV" == "prod" ]; then
             ADMIN_TAG="prod-${{ github.sha }}"
-            MONGODB_TAG="5.0.2"
-            REDIS_TAG="6.2-alpine"
+            FRONTEND_TAG="prod-${{ github.sha }}"
+            BACKEND_TAG="prod-${{ github.sha }}"
           elif [ "$ENV" == "staging" ]; then
             ADMIN_TAG="staging-${{ github.sha }}"
-            MONGODB_TAG="5.0.2"
-            REDIS_TAG="6.2-alpine"
+            FRONTEND_TAG="staging-${{ github.sha }}"
+            BACKEND_TAG="staging-${{ github.sha }}"
           elif [ "$ENV" == "dev" ]; then
             ADMIN_TAG="dev-${{ github.sha }}"
-            MONGODB_TAG="5.0.2"
-            REDIS_TAG="6.2-alpine"
+            FRONTEND_TAG="dev-${{ github.sha }}"
+            BACKEND_TAG="dev-${{ github.sha }}"
           fi
           
           echo "admin_tag=$ADMIN_TAG" >> $GITHUB_OUTPUT
-          echo "mongodb_tag=$MONGODB_TAG" >> $GITHUB_OUTPUT
-          echo "redis_tag=$REDIS_TAG" >> $GITHUB_OUTPUT
+          echo "frontend_tag=$FRONTEND_TAG" >> $GITHUB_OUTPUT
+          echo "backend_tag=$BACKEND_TAG" >> $GITHUB_OUTPUT
           
           # Export tags as environment variables for the deployment scripts
           echo "ADMIN_TAG=$ADMIN_TAG" >> $GITHUB_ENV
-          echo "MONGODB_TAG=$MONGODB_TAG" >> $GITHUB_ENV
-          echo "REDIS_TAG=$REDIS_TAG" >> $GITHUB_ENV
+          echo "FRONTEND_TAG=$FRONTEND_TAG" >> $GITHUB_ENV
+          echo "BACKEND_TAG=$BACKEND_TAG" >> $GITHUB_ENV
         
       # Make the deployment scripts executable
       - name: Make deployment scripts executable
@@ -143,36 +143,109 @@ jobs:
           cp .github/workflows/k8s/* k8s/
           chmod +x k8s/*.sh
           
-      # Run the appropriate deployment script based on the environment
-      - name: Deploy to ${{ needs.set-environment.outputs.environment }}
-        env:
-          NAMESPACE: ${{ needs.set-environment.outputs.namespace }}
+      # Deploy Admin service
+      - name: Deploy Admin Service
         run: |
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           ENV="${{ needs.set-environment.outputs.environment }}"
           
+          echo "Deploying Admin service..."
+          helm upgrade --install admin ./charts/admin \
+            --namespace "$NAMESPACE" \
+            --create-namespace \
+            --values ./charts/admin/environments/values.$ENV.yaml \
+            --set image.tag="${ADMIN_TAG}" \
+            --set imagePullSecrets[0].name=harbor-creds \
+            --set environment=$ENV \
+            --set namespace=$NAMESPACE \
+            --timeout 10m \
+            --wait
+          
+          echo "Admin service deployed"
+          
+      # Deploy Frontend service
+      - name: Deploy Frontend Service
+        run: |
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          ENV="${{ needs.set-environment.outputs.environment }}"
+          
+          # Set domain and URL values based on environment
           if [ "$ENV" == "prod" ]; then
-            # Use the production deployment script
-            k8s/prod.sh
+            API_URL="https://emcp-prod.enclaive.cloud"
+            APP_URL="https://console.enclaive.cloud"
+            BETA_FEATURES="false"
           elif [ "$ENV" == "staging" ]; then
-            # Use the staging deployment script
-            k8s/staging.sh
+            API_URL="https://emcp-staging.enclaive.cloud"
+            APP_URL="https://staging.console.enclaive.cloud"
+            BETA_FEATURES="true"
           elif [ "$ENV" == "dev" ]; then
-            # Use the development deployment script
-            k8s/dev.sh
+            API_URL="https://emcp-dev.enclaive.cloud"
+            APP_URL="https://dev.console.enclaive.cloud"
+            BETA_FEATURES="true"
           fi
+          
+          echo "Deploying Frontend service..."
+          helm upgrade --install frontend ./charts/frontend \
+            --namespace "$NAMESPACE" \
+            --create-namespace \
+            --values ./charts/frontend/environments/$ENV.yaml \
+            --set image.tag="${FRONTEND_TAG}" \
+            --set imagePullSecrets[0].name=harbor-creds \
+            --set environment=$ENV \
+            --set api.url="$API_URL" \
+            --set app.url="$APP_URL" \
+            --set features.enableBetaFeatures=$BETA_FEATURES \
+            --timeout 10m \
+            --wait
+          
+          echo "Frontend service deployed"
+          
+      # Deploy Backend service
+      - name: Deploy Backend Service
+        run: |
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          ENV="${{ needs.set-environment.outputs.environment }}"
+          
+          # Set logging level and features based on environment
+          if [ "$ENV" == "prod" ]; then
+            LOG_LEVEL="info"
+            ENABLE_BACKUPS="true"
+          elif [ "$ENV" == "staging" ]; then
+            LOG_LEVEL="info"
+            ENABLE_BACKUPS="true"
+          elif [ "$ENV" == "dev" ]; then
+            LOG_LEVEL="debug"
+            ENABLE_BACKUPS="false"
+          fi
+          
+          echo "Deploying Backend service..."
+          helm upgrade --install backend ./charts/backend \
+            --namespace "$NAMESPACE" \
+            --create-namespace \
+            --values ./charts/backend/environments/$ENV.yaml \
+            --set image.tag="${BACKEND_TAG}" \
+            --set imagePullSecrets[0].name=harbor-creds \
+            --set environment=$ENV \
+            --set logging.level=$LOG_LEVEL \
+            --set features.enableBackups=$ENABLE_BACKUPS \
+            --timeout 15m \
+            --wait \
+            --debug
+          
+          echo "Backend service deployed"
           
       - name: Verify deployments
         run: |
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
-          echo "Verifying MongoDB deployment..."
-          kubectl rollout status statefulset/mongodb -n $NAMESPACE --timeout=300s || true
-          
-          echo "Verifying Redis deployment..."
-          kubectl rollout status statefulset/redis -n $NAMESPACE --timeout=300s || true
-          
           echo "Verifying Admin deployment..."
           kubectl rollout status statefulset/admin -n $NAMESPACE --timeout=300s || true
+          
+          echo "Verifying Frontend deployment..."
+          kubectl rollout status statefulset/frontend -n $NAMESPACE --timeout=300s || true
+          
+          echo "Verifying Backend deployment..."
+          kubectl rollout status statefulset/backend -n $NAMESPACE --timeout=300s || true
           
       - name: Report deployment status
         if: always()
@@ -180,14 +253,14 @@ jobs:
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
           echo "=== Deployment Status for ${{ needs.set-environment.outputs.environment }} ==="
-          echo "MongoDB: $(kubectl get statefulset mongodb -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
-          echo "Redis: $(kubectl get statefulset redis -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
           echo "Admin: $(kubectl get statefulset admin -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
+          echo "Frontend: $(kubectl get statefulset frontend -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
+          echo "Backend: $(kubectl get statefulset backend -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
           
           echo "=== Pod Status ==="
-          kubectl get pods -n $NAMESPACE -l app=mongodb
-          kubectl get pods -n $NAMESPACE -l app=redis
           kubectl get pods -n $NAMESPACE -l app=admin
+          kubectl get pods -n $NAMESPACE -l app=frontend
+          kubectl get pods -n $NAMESPACE -l app=backend
           
           echo "=== Service Status ==="
           kubectl get services -n $NAMESPACE
