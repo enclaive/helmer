@@ -1,5 +1,5 @@
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   name: frontend
   namespace: {{ .Values.namespace }}
@@ -7,13 +7,11 @@ metadata:
     app: frontend
     {{- include "frontend.labels" . | nindent 4 }}
 spec:
-  podManagementPolicy: OrderedReady
   replicas: {{ .Values.replicaCount }}
   revisionHistoryLimit: 10
   selector:
     matchLabels:
       app: frontend
-  serviceName: frontend
   template:
     metadata:
       labels:

@@ -1,3 +1,4 @@
+
 # charts/frontend/environments/values.dev.yaml
 namespace: emcp-dev
 domain: dev.enclaive.cloud
@@ -7,6 +8,10 @@ image:
   repository: 886093416603.dkr.ecr.eu-central-1.amazonaws.com/frontend
   tag: "dev"
   pullPolicy: Always
+
+# Explicitly disable ingress
+ingress:
+  enabled: false
 
 # Resources for development environment
 resources:

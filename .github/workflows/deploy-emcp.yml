@@ -564,6 +564,106 @@ jobs:
           fi
       
       # Deploy Frontend service
+deploy-frontend:
+    name: Deploy Frontend to EKS
+    needs: [set-environment, check-changes, deploy-backend]
+    if: |
+      always() && 
+      (needs.check-changes.outputs.frontend_changed == 'true' || 
+       needs.check-changes.outputs.workflow_changed == 'true')
+    runs-on: ubuntu-latest
+    environment: ${{ needs.set-environment.outputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
+          
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'v3.12.0'
+      
+      # Create AWS ECR pull secret (in case previous jobs failed)
+      - name: Create ECR pull credentials
+        run: |
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          
+          # Get ECR login token
+          TOKEN=$(aws ecr get-login-password --region ${{ env.AWS_REGION }})
+          
+          # Create the Kubernetes secret for ECR
+          kubectl create secret docker-registry aws-ecr-creds \
+            --docker-server=${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com \
+            --docker-username=AWS \
+            --docker-password="$TOKEN" \
+            --namespace=$NAMESPACE \
+            --dry-run=client -o yaml | kubectl apply -f -
+            
+          echo "Created ECR pull secret: aws-ecr-creds"
+      
+      - name: Set Frontend image tag
+        id: set-tag
+        run: |
+          ENV="${{ needs.set-environment.outputs.environment }}"
+          
+          # Use simple tag names
+          if [ "$ENV" == "prod" ]; then
+            TAG="prod"
+          elif [ "$ENV" == "staging" ]; then
+            TAG="staging"
+          elif [ "$ENV" == "dev" ]; then
+            TAG="dev"
+          fi
+          
+          # Full ECR image path
+          ECR_IMAGE="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/frontend:${TAG}"
+          
+          echo "frontend_tag=$TAG" >> $GITHUB_OUTPUT
+          echo "frontend_image=$ECR_IMAGE" >> $GITHUB_OUTPUT
+          echo "FRONTEND_TAG=$TAG" >> $GITHUB_ENV
+          echo "FRONTEND_IMAGE=$ECR_IMAGE" >> $GITHUB_ENV
+          
+          echo "Using image: $ECR_IMAGE"
+      
+      # Clean up any existing failed resources and TLS secrets causing errors
+      - name: Clean up resources if needed
+        run: |
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          
+          # First, remove any problematic TLS secrets
+          echo "Removing any problematic TLS secrets..."
+          kubectl delete secret frontend-ingress-tls -n $NAMESPACE --ignore-not-found
+          kubectl delete secret frontend-prianto-ingress-tls -n $NAMESPACE --ignore-not-found
+          kubectl delete secret frontend-govtech-ingress-tls -n $NAMESPACE --ignore-not-found
+          
+          # Check if there are any pods with ImagePull issues
+          kubectl get pods -n $NAMESPACE -l app=frontend 2>/dev/null || echo "No frontend pods found."
+          PODS_WITH_ISSUES=$(kubectl get pods -n $NAMESPACE -l app=frontend 2>/dev/null | grep -E "ImagePull|ErrImage" || echo "")
+          
+          if [[ -n "$PODS_WITH_ISSUES" ]]; then
+            echo "Found pods with image pull issues. Cleaning up..."
+            kubectl delete pods -n $NAMESPACE -l app=frontend --grace-period=0 --force || true
+          fi
+          
+          # Clean up any existing frontend StatefulSet
+          kubectl delete statefulset frontend -n $NAMESPACE --ignore-not-found
+          
+          # Wait for resources to be fully removed
+          echo "Waiting for resources to be fully removed..."
+          sleep 5
+      
+      # Deploy Frontend service
       - name: Deploy Frontend Service
         run: |
           ENV="${{ needs.set-environment.outputs.environment }}"
@@ -598,6 +698,7 @@ jobs:
             --set imagePullSecrets[0].name=aws-ecr-creds \
             --set logging.level=$LOG_LEVEL \
             --set logging.format=$LOG_FORMAT \
+            --set ingress.enabled=false \
             --force \
             --debug \
             --timeout 10m \
@@ -611,7 +712,7 @@ jobs:
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
           echo "Verifying Frontend deployment..."
-          kubectl rollout status statefulset/frontend -n $NAMESPACE --timeout=300s || true
+          kubectl rollout status deployment/frontend -n $NAMESPACE --timeout=300s || true
           
       - name: Report Frontend deployment status
         if: always()
@@ -619,15 +720,16 @@ jobs:
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
           echo "=== Frontend Deployment Status for ${{ needs.set-environment.outputs.environment }} ==="
-          echo "Frontend: $(kubectl get statefulset frontend -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
+          echo "Frontend: $(kubectl get deployment frontend -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
           
           echo "=== Frontend Pod Status ==="
           kubectl get pods -n $NAMESPACE -l app=frontend || echo "No frontend pods found"
           
           echo "=== Pod Details ==="
-          # First check if the pod exists before trying to describe it
-          if kubectl get pod frontend-0 -n $NAMESPACE &>/dev/null; then
-            kubectl describe pod frontend-0 -n $NAMESPACE
+          # Get the first pod name instead of using a fixed name pattern
+          FRONTEND_POD=$(kubectl get pods -n $NAMESPACE -l app=frontend -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+          if [[ -n "$FRONTEND_POD" ]]; then
+            kubectl describe pod $FRONTEND_POD -n $NAMESPACE
           else
             echo "Frontend pod not found. Deployment may have failed or not started yet."
           fi
