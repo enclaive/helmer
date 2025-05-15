@@ -1,10 +1,11 @@
-name: Deploy Admin to EKS from ECR
+name: Deploy Services to EKS from ECR
 
 on:
   push:
     branches: [ main, dev, staging ]
     paths:
       - 'charts/admin/**'
+      - 'charts/backend/**'
       - '.github/workflows/deploy-emcp.yml'
       - '.github/workflows/k8s/**'
   workflow_dispatch:
@@ -23,7 +24,6 @@ env:
   AWS_REGION: eu-central-1
   EKS_CLUSTER_NAME: emcp-eks-cluster
   AWS_ACCOUNT_ID: 886093416603
-  ECR_REPOSITORY: emcp
 
 jobs:
   set-environment:
@@ -127,7 +127,7 @@ jobs:
           fi
           
           # Full ECR image path
-          ECR_IMAGE="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${TAG}"
+          ECR_IMAGE="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/admin:${TAG}"
           
           echo "admin_tag=$TAG" >> $GITHUB_OUTPUT
           echo "admin_image=$ECR_IMAGE" >> $GITHUB_OUTPUT
@@ -174,10 +174,11 @@ jobs:
           helm upgrade --install admin ./charts/admin \
             --namespace $NAMESPACE \
             --create-namespace \
+            --values ./charts/admin/environments/values.${ENV}.yaml \
             --set namespace=$NAMESPACE \
             --set domain=admin.enclaive.cloud \
             --set environment=$ENV \
-            --set image.repository="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}" \
+            --set image.repository="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/admin" \
             --set image.tag="${ADMIN_TAG}" \
             --set image.pullPolicy=Always \
             --set imagePullSecrets[0].name=aws-ecr-creds \
@@ -214,3 +215,158 @@ jobs:
           
           echo "=== Admin Service Status ==="
           kubectl get service admin -n $NAMESPACE
+
+  deploy-backend:
+    name: Deploy Backend to EKS
+    runs-on: ubuntu-latest
+    needs: [set-environment, deploy-admin]  # Run after admin is deployed
+    environment: ${{ needs.set-environment.outputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
+          
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'v3.12.0'
+      
+      # Create AWS ECR pull secret (in case admin job failed)
+      - name: Create ECR pull credentials
+        run: |
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          
+          # Get ECR login token
+          TOKEN=$(aws ecr get-login-password --region ${{ env.AWS_REGION }})
+          
+          # Create the Kubernetes secret for ECR
+          kubectl create secret docker-registry aws-ecr-creds \
+            --docker-server=${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com \
+            --docker-username=AWS \
+            --docker-password="$TOKEN" \
+            --namespace=$NAMESPACE \
+            --dry-run=client -o yaml | kubectl apply -f -
+            
+          echo "Created ECR pull secret: aws-ecr-creds"
+      
+      - name: Set Backend image tag
+        id: set-tag
+        run: |
+          ENV="${{ needs.set-environment.outputs.environment }}"
+          
+          # Use simple tag names
+          if [ "$ENV" == "prod" ]; then
+            TAG="prod"
+          elif [ "$ENV" == "staging" ]; then
+            TAG="staging"
+          elif [ "$ENV" == "dev" ]; then
+            TAG="dev"
+          fi
+          
+          # Full ECR image path
+          ECR_IMAGE="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/backend0:${TAG}"
+          
+          echo "backend_tag=$TAG" >> $GITHUB_OUTPUT
+          echo "backend_image=$ECR_IMAGE" >> $GITHUB_OUTPUT
+          echo "BACKEND_TAG=$TAG" >> $GITHUB_ENV
+          echo "BACKEND_IMAGE=$ECR_IMAGE" >> $GITHUB_ENV
+          
+          echo "Using image: $ECR_IMAGE"
+      
+      # Clean up any existing failed resources
+      - name: Clean up resources if needed
+        run: |
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          
+          # Check if there are any pods with ImagePull issues
+          if kubectl get pods -n $NAMESPACE -l app=backend | grep -E "ImagePull|ErrImage"; then
+            echo "Found pods with image pull issues. Cleaning up..."
+            kubectl delete pods -n $NAMESPACE -l app=backend --grace-period=0 --force || true
+            kubectl delete statefulset backend -n $NAMESPACE || true
+            sleep 5
+          fi
+      
+      # Deploy Backend service
+      - name: Deploy Backend Service
+        run: |
+          ENV="${{ needs.set-environment.outputs.environment }}"
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          ECR_IMAGE="${BACKEND_IMAGE}"
+          
+          echo "Deploying Backend service to $NAMESPACE using $ECR_IMAGE..."
+          
+          # Determine log level based on environment
+          if [ "$ENV" == "prod" ]; then
+            LOG_LEVEL="info"
+            LOG_FORMAT="json"
+          elif [ "$ENV" == "staging" ]; then
+            LOG_LEVEL="info"
+            LOG_FORMAT="json"
+          else
+            LOG_LEVEL="debug"
+            LOG_FORMAT="pretty"
+          fi
+          
+          # Deploy using Helm with ECR image
+          helm upgrade --install backend ./charts/backend \
+            --namespace $NAMESPACE \
+            --create-namespace \
+            --values ./charts/backend/environments/values.${ENV}.yaml \
+            --set namespace=$NAMESPACE \
+            --set environment=$ENV \
+            --set image.repository="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/backend0" \
+            --set image.tag="${BACKEND_TAG}" \
+            --set image.pullPolicy=Always \
+            --set imagePullSecrets[0].name=aws-ecr-creds \
+            --set logging.level=$LOG_LEVEL \
+            --set logging.format=$LOG_FORMAT \
+            --set features.enableBackups=false \
+            --set mongodb.host=mongodb \
+            --set mongodb.port=27017 \
+            --set mongodb.database=backend_db \
+            --set mongodb.username=root \
+            --set mongodb.password=root \
+            --set redis.host=redis \
+            --set redis.port=6379 \
+            --force \
+            --debug \
+            --timeout 10m \
+            --wait
+          
+          echo "Backend service deployed with image: ${ECR_IMAGE}"
+          
+      # Verify deployment status
+      - name: Verify Backend deployment
+        run: |
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          
+          echo "Verifying Backend deployment..."
+          kubectl rollout status statefulset/backend -n $NAMESPACE --timeout=300s || true
+          
+      - name: Report Backend deployment status
+        if: always()
+        run: |
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          
+          echo "=== Backend Deployment Status for ${{ needs.set-environment.outputs.environment }} ==="
+          echo "Backend: $(kubectl get statefulset backend -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
+          
+          echo "=== Backend Pod Status ==="
+          kubectl get pods -n $NAMESPACE -l app=backend
+          
+          echo "=== Pod Details ==="
+          kubectl describe pod backend-0 -n $NAMESPACE
+          
+          echo "=== Backend Service Status ==="
+          kubectl get service backend -n $NAMESPACE
