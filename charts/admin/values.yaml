@@ -45,21 +45,6 @@ tolerations: []
 
 affinity: {}
 
-persistence:
-  enabled: true
-  storageClass: "gp2"  
-  size: 1Gi
-
-probes:
-  liveness:
-    initialDelaySeconds: 10
-    periodSeconds: 3
-    failureThreshold: 10
-  readiness:
-    initialDelaySeconds: 10
-    periodSeconds: 3
-    failureThreshold: 10
-
 # Default logging configuration
 logging:
   level: "info"

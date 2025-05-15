@@ -4,7 +4,4 @@
                                                                                   
     image:
       repository: harbor.enclaive.cloud/emcp/admin
-      tag: "dev-latest"                                                           
-                                                                                  
-    persistence:                                                                  
-      size: 512Mi  # Smaller volume in dev 
+      tag: "dev-latest"                    

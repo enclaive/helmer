@@ -7,9 +7,6 @@ metadata:
     app: admin
     {{- include "admin.labels" . | nindent 4 }}
 spec:
-  persistentVolumeClaimRetentionPolicy:
-    whenDeleted: Retain
-    whenScaled: Retain
   podManagementPolicy: OrderedReady
   replicas: {{ .Values.replicaCount }}
   revisionHistoryLimit: 10
@@ -63,10 +60,6 @@ spec:
           volumeMounts:
             - mountPath: /app/config
               name: config-volume
-            {{- if .Values.persistence.enabled }}
-            - mountPath: /app/data
-              name: admin-data
-            {{- end }}
       volumes:
         - name: config-volume
           configMap:
@@ -83,17 +76,3 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-  {{- if .Values.persistence.enabled }}
-  volumeClaimTemplates:
-    - apiVersion: v1
-      kind: PersistentVolumeClaim
-      metadata:
-        name: admin-data
-      spec:
-        accessModes:
-          - ReadWriteOnce
-        resources:
-          requests:
-            storage: {{ .Values.persistence.size | default "1Gi" }}
-        storageClassName: {{ .Values.persistence.storageClass | default "gp2" }}
-  {{- end }}

@@ -7,9 +7,6 @@ image:
   repository: harbor.enclaive.cloud/emcp/admin                                                                       
   tag: "prod-latest"                                                           
                                                                                   
-persistence:                                                                  
-  size: 5Gi  # Larger volume for production
-
 # Client-specific configurations
 ingress:
   additionalHosts:
