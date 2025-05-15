@@ -14,7 +14,7 @@ resources:
     cpu: 750m
     memory: 1.5Gi
   requests:
-    cpu: 200m
+    cpu: 250m
     memory: 512Mi
 
 # API endpoints for staging

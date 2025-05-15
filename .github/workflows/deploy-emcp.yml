@@ -20,6 +20,21 @@ on:
           - dev
           - staging
           - prod
+      deploy_admin:
+        description: 'Deploy admin service'
+        required: false
+        default: true
+        type: boolean
+      deploy_backend:
+        description: 'Deploy backend service'
+        required: false
+        default: true
+        type: boolean
+      deploy_frontend:
+        description: 'Deploy frontend service'
+        required: false
+        default: true
+        type: boolean
 
 env:
   AWS_REGION: eu-central-1
@@ -62,10 +77,78 @@ jobs:
           echo "Selected environment: $ENVIRONMENT"
           echo "Using namespace: emcp-$ENVIRONMENT"
 
+  check-changes:
+    name: Check for Changes
+    runs-on: ubuntu-latest
+    outputs:
+      admin_changed: ${{ steps.check-folders.outputs.admin_changed }}
+      backend_changed: ${{ steps.check-folders.outputs.backend_changed }}
+      frontend_changed: ${{ steps.check-folders.outputs.frontend_changed }}
+      workflow_changed: ${{ steps.check-folders.outputs.workflow_changed }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2  # Needed for file comparison with previous commit
+      
+      - name: Check which folders changed
+        id: check-folders
+        run: |
+          # For workflow_dispatch, use the input values
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "admin_changed=${{ github.event.inputs.deploy_admin }}" >> $GITHUB_OUTPUT
+            echo "backend_changed=${{ github.event.inputs.deploy_backend }}" >> $GITHUB_OUTPUT
+            echo "frontend_changed=${{ github.event.inputs.deploy_frontend }}" >> $GITHUB_OUTPUT
+            echo "workflow_changed=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # For push events, check which files changed
+          echo "Checking changes in the last commit..."
+          
+          # Get changed files
+          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
+          
+          # Check if specific folders were modified
+          if echo "$CHANGED_FILES" | grep -q "^charts/admin/"; then
+            echo "Admin service files changed"
+            echo "admin_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "No changes in admin service"
+            echo "admin_changed=false" >> $GITHUB_OUTPUT
+          fi
+          
+          if echo "$CHANGED_FILES" | grep -q "^charts/backend/"; then
+            echo "Backend service files changed"
+            echo "backend_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "No changes in backend service"
+            echo "backend_changed=false" >> $GITHUB_OUTPUT
+          fi
+          
+          if echo "$CHANGED_FILES" | grep -q "^charts/frontend/"; then
+            echo "Frontend service files changed"
+            echo "frontend_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "No changes in frontend service"
+            echo "frontend_changed=false" >> $GITHUB_OUTPUT
+          fi
+          
+          # Check if workflow files changed
+          if echo "$CHANGED_FILES" | grep -q "^.github/workflows/"; then
+            echo "Workflow files changed"
+            echo "workflow_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "No changes in workflow files"
+            echo "workflow_changed=false" >> $GITHUB_OUTPUT
+          fi
+
   deploy-admin:
     name: Deploy Admin to EKS
+    needs: [set-environment, check-changes]
+    if: needs.check-changes.outputs.admin_changed == 'true' || needs.check-changes.outputs.workflow_changed == 'true'
     runs-on: ubuntu-latest
-    needs: set-environment
     environment: ${{ needs.set-environment.outputs.environment }}
     
     steps:
@@ -143,7 +226,10 @@ jobs:
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
           # Check if there are any pods with ImagePull issues
-          if kubectl get pods -n $NAMESPACE -l app=admin | grep -E "ImagePull|ErrImage"; then
+          kubectl get pods -n $NAMESPACE -l app=admin 2>/dev/null || echo "No admin pods found."
+          PODS_WITH_ISSUES=$(kubectl get pods -n $NAMESPACE -l app=admin 2>/dev/null | grep -E "ImagePull|ErrImage" || echo "")
+          
+          if [[ -n "$PODS_WITH_ISSUES" ]]; then
             echo "Found pods with image pull issues. Cleaning up..."
             kubectl delete pods -n $NAMESPACE -l app=admin --grace-period=0 --force || true
             kubectl delete statefulset admin -n $NAMESPACE || true
@@ -212,15 +298,24 @@ jobs:
           kubectl get pods -n $NAMESPACE -l app=admin
           
           echo "=== Pod Details ==="
-          kubectl describe pod admin-0 -n $NAMESPACE
+          # First check if the pod exists before trying to describe it
+          if kubectl get pod admin-0 -n $NAMESPACE &>/dev/null; then
+            kubectl describe pod admin-0 -n $NAMESPACE
+          else
+            echo "Admin pod not found. Deployment may have failed or not started yet."
+          fi
           
           echo "=== Admin Service Status ==="
           kubectl get service admin -n $NAMESPACE
 
   deploy-backend:
     name: Deploy Backend to EKS
+    needs: [set-environment, check-changes, deploy-admin]
+    if: |
+      always() && 
+      (needs.check-changes.outputs.backend_changed == 'true' || 
+       needs.check-changes.outputs.workflow_changed == 'true')
     runs-on: ubuntu-latest
-    needs: [set-environment, deploy-admin]  # Run after admin is deployed
     environment: ${{ needs.set-environment.outputs.environment }}
     
     steps:
@@ -291,7 +386,10 @@ jobs:
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
           # Check if there are any pods with ImagePull issues
-          if kubectl get pods -n $NAMESPACE -l app=backend | grep -E "ImagePull|ErrImage"; then
+          kubectl get pods -n $NAMESPACE -l app=backend 2>/dev/null || echo "No backend pods found."
+          PODS_WITH_ISSUES=$(kubectl get pods -n $NAMESPACE -l app=backend 2>/dev/null | grep -E "ImagePull|ErrImage" || echo "")
+          
+          if [[ -n "$PODS_WITH_ISSUES" ]]; then
             echo "Found pods with image pull issues. Cleaning up..."
             kubectl delete pods -n $NAMESPACE -l app=backend --grace-period=0 --force || true
             kubectl delete statefulset backend -n $NAMESPACE || true
@@ -345,7 +443,7 @@ jobs:
             --timeout 10m \
             --wait
           
-          echo "Backend service deployed with image: ${BACKEND_IMAGE}"
+          echo "Backend service deployed with image: ${ECR_IMAGE}"
           
       # Verify deployment status
       - name: Verify Backend deployment
@@ -364,18 +462,27 @@ jobs:
           echo "Backend: $(kubectl get statefulset backend -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
           
           echo "=== Backend Pod Status ==="
-          kubectl get pods -n $NAMESPACE -l app=backend
+          kubectl get pods -n $NAMESPACE -l app=backend || echo "No backend pods found"
           
           echo "=== Pod Details ==="
-          kubectl describe pod backend-0 -n $NAMESPACE
+          # First check if the pod exists before trying to describe it
+          if kubectl get pod backend-0 -n $NAMESPACE &>/dev/null; then
+            kubectl describe pod backend-0 -n $NAMESPACE
+          else
+            echo "Backend pod not found. Deployment may have failed or not started yet."
+          fi
           
           echo "=== Backend Service Status ==="
-          kubectl get service backend -n $NAMESPACE
+          kubectl get service backend -n $NAMESPACE || echo "No backend service found"
 
   deploy-frontend:
     name: Deploy Frontend to EKS
+    needs: [set-environment, check-changes, deploy-backend]
+    if: |
+      always() && 
+      (needs.check-changes.outputs.frontend_changed == 'true' || 
+       needs.check-changes.outputs.workflow_changed == 'true')
     runs-on: ubuntu-latest
-    needs: [set-environment, deploy-backend]  # Run after backend is deployed
     environment: ${{ needs.set-environment.outputs.environment }}
     
     steps:
@@ -446,7 +553,10 @@ jobs:
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
           # Check if there are any pods with ImagePull issues
-          if kubectl get pods -n $NAMESPACE -l app=frontend | grep -E "ImagePull|ErrImage"; then
+          kubectl get pods -n $NAMESPACE -l app=frontend 2>/dev/null || echo "No frontend pods found."
+          PODS_WITH_ISSUES=$(kubectl get pods -n $NAMESPACE -l app=frontend 2>/dev/null | grep -E "ImagePull|ErrImage" || echo "")
+          
+          if [[ -n "$PODS_WITH_ISSUES" ]]; then
             echo "Found pods with image pull issues. Cleaning up..."
             kubectl delete pods -n $NAMESPACE -l app=frontend --grace-period=0 --force || true
             kubectl delete statefulset frontend -n $NAMESPACE || true
@@ -474,13 +584,13 @@ jobs:
             LOG_FORMAT="pretty"
           fi
           
-          # Deploy using Helm with ECR image
+          # Deploy using Helm with ECR image (explicitly specifying the chart path)
           helm upgrade --install frontend ./charts/frontend \
             --namespace $NAMESPACE \
             --create-namespace \
             --values ./charts/frontend/environments/values.${ENV}.yaml \
             --set namespace=$NAMESPACE \
-            --set domain=console.enclaive.cloud \  # Add this line to match admin pattern
+            --set domain=console.enclaive.cloud \
             --set environment=$ENV \
             --set image.repository="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/frontend" \
             --set image.tag="${FRONTEND_TAG}" \
@@ -512,10 +622,15 @@ jobs:
           echo "Frontend: $(kubectl get statefulset frontend -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
           
           echo "=== Frontend Pod Status ==="
-          kubectl get pods -n $NAMESPACE -l app=frontend
+          kubectl get pods -n $NAMESPACE -l app=frontend || echo "No frontend pods found"
           
           echo "=== Pod Details ==="
-          kubectl describe pod frontend-0 -n $NAMESPACE
+          # First check if the pod exists before trying to describe it
+          if kubectl get pod frontend-0 -n $NAMESPACE &>/dev/null; then
+            kubectl describe pod frontend-0 -n $NAMESPACE
+          else
+            echo "Frontend pod not found. Deployment may have failed or not started yet."
+          fi
           
           echo "=== Frontend Service Status ==="
-          kubectl get service frontend -n $NAMESPACE
+          kubectl get service frontend -n $NAMESPACE || echo "No frontend service found"
