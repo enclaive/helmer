@@ -44,3 +44,5 @@ data:
       version: "{{ .Values.image.tag }}",
       supportEmail: "support@enclaive.cloud"
     }
+
+    

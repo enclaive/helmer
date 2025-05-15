@@ -108,41 +108,56 @@ jobs:
           echo "Checking changes in the last commit..."
           
           # Get changed files
-          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
+          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD || git diff --name-only $(git rev-parse --short HEAD^) $(git rev-parse --short HEAD))
+          echo "Changed files: $CHANGED_FILES"
+          
+          # Default all to false
+          ADMIN_CHANGED="false"
+          BACKEND_CHANGED="false"
+          FRONTEND_CHANGED="false"
+          WORKFLOW_CHANGED="false"
           
           # Check if specific folders were modified
           if echo "$CHANGED_FILES" | grep -q "^charts/admin/"; then
             echo "Admin service files changed"
-            echo "admin_changed=true" >> $GITHUB_OUTPUT
+            ADMIN_CHANGED="true"
           else
             echo "No changes in admin service"
-            echo "admin_changed=false" >> $GITHUB_OUTPUT
           fi
           
           if echo "$CHANGED_FILES" | grep -q "^charts/backend/"; then
             echo "Backend service files changed"
-            echo "backend_changed=true" >> $GITHUB_OUTPUT
+            BACKEND_CHANGED="true"
           else
             echo "No changes in backend service"
-            echo "backend_changed=false" >> $GITHUB_OUTPUT
           fi
           
           if echo "$CHANGED_FILES" | grep -q "^charts/frontend/"; then
             echo "Frontend service files changed"
-            echo "frontend_changed=true" >> $GITHUB_OUTPUT
+            FRONTEND_CHANGED="true"
           else
             echo "No changes in frontend service"
-            echo "frontend_changed=false" >> $GITHUB_OUTPUT
           fi
           
           # Check if workflow files changed
           if echo "$CHANGED_FILES" | grep -q "^.github/workflows/"; then
             echo "Workflow files changed"
-            echo "workflow_changed=true" >> $GITHUB_OUTPUT
+            WORKFLOW_CHANGED="true"
           else
             echo "No changes in workflow files"
-            echo "workflow_changed=false" >> $GITHUB_OUTPUT
           fi
+          
+          # Set outputs explicitly
+          echo "admin_changed=${ADMIN_CHANGED}" >> $GITHUB_OUTPUT
+          echo "backend_changed=${BACKEND_CHANGED}" >> $GITHUB_OUTPUT
+          echo "frontend_changed=${FRONTEND_CHANGED}" >> $GITHUB_OUTPUT
+          echo "workflow_changed=${WORKFLOW_CHANGED}" >> $GITHUB_OUTPUT
+          
+          # Debug outputs
+          echo "admin_changed: ${ADMIN_CHANGED}"
+          echo "backend_changed: ${BACKEND_CHANGED}"
+          echo "frontend_changed: ${FRONTEND_CHANGED}"
+          echo "workflow_changed: ${WORKFLOW_CHANGED}"
 
   deploy-admin:
     name: Deploy Admin to EKS
@@ -260,7 +275,6 @@ jobs:
           # Deploy using Helm with ECR image
           helm upgrade --install admin ./charts/admin \
             --namespace $NAMESPACE \
-            --create-namespace \
             --values ./charts/admin/environments/values.${ENV}.yaml \
             --set namespace=$NAMESPACE \
             --set domain=admin.enclaive.cloud \
@@ -272,7 +286,6 @@ jobs:
             --set logging.level=$LOG_LEVEL \
             --set logging.format=$LOG_FORMAT \
             --force \
-            --debug \
             --timeout 10m \
             --wait
           
@@ -420,7 +433,6 @@ jobs:
           # Deploy using Helm with ECR image
           helm upgrade --install backend ./charts/backend \
             --namespace $NAMESPACE \
-            --create-namespace \
             --values ./charts/backend/environments/values.${ENV}.yaml \
             --set namespace=$NAMESPACE \
             --set environment=$ENV \
@@ -439,7 +451,6 @@ jobs:
             --set redis.host=redis \
             --set redis.port=6379 \
             --force \
-            --debug \
             --timeout 10m \
             --wait
           
@@ -558,21 +569,30 @@ jobs:
           kubectl delete secret frontend-prianto-ingress-tls -n $NAMESPACE --ignore-not-found
           kubectl delete secret frontend-govtech-ingress-tls -n $NAMESPACE --ignore-not-found
           
-          # Check if there are any pods with ImagePull issues
-          kubectl get pods -n $NAMESPACE -l app=frontend 2>/dev/null || echo "No frontend pods found."
-          PODS_WITH_ISSUES=$(kubectl get pods -n $NAMESPACE -l app=frontend 2>/dev/null | grep -E "ImagePull|ErrImage" || echo "")
-          
-          if [[ -n "$PODS_WITH_ISSUES" ]]; then
-            echo "Found pods with image pull issues. Cleaning up..."
-            kubectl delete pods -n $NAMESPACE -l app=frontend --grace-period=0 --force || true
+          # Check if there are any frontend resources at all
+          if kubectl get deployment frontend -n $NAMESPACE &>/dev/null; then
+            echo "Found existing frontend deployment, checking for issues..."
+            
+            # Check for pods with issues
+            PODS_WITH_ISSUES=$(kubectl get pods -n $NAMESPACE -l app=frontend 2>/dev/null | grep -E "ImagePull|ErrImage" || echo "")
+            
+            if [[ -n "$PODS_WITH_ISSUES" ]]; then
+              echo "Found pods with image pull issues. Cleaning up..."
+              kubectl delete pods -n $NAMESPACE -l app=frontend --grace-period=0 --force || true
+            fi
+          else
+            echo "No existing frontend deployment found. Will create a new one."
           fi
           
-          # Clean up any existing frontend StatefulSet
-          kubectl delete statefulset frontend -n $NAMESPACE --ignore-not-found
-          
-          # Wait for resources to be fully removed
-          echo "Waiting for resources to be fully removed..."
-          sleep 5
+          # Clean up any existing frontend StatefulSet (from previous versions)
+          if kubectl get statefulset frontend -n $NAMESPACE &>/dev/null; then
+            echo "Found old frontend StatefulSet. Removing..."
+            kubectl delete statefulset frontend -n $NAMESPACE
+            
+            # Wait for resources to be fully removed
+            echo "Waiting for resources to be fully removed..."
+            sleep 10
+          fi
       
       # Deploy Frontend service
       - name: Deploy Frontend Service
@@ -595,10 +615,9 @@ jobs:
             LOG_FORMAT="pretty"
           fi
           
-          # Deploy using Helm with ECR image (explicitly specifying the chart path)
+          # Deploy using Helm with ECR image
           helm upgrade --install frontend ./charts/frontend \
             --namespace $NAMESPACE \
-            --create-namespace \
             --values ./charts/frontend/environments/values.${ENV}.yaml \
             --set namespace=$NAMESPACE \
             --set domain=console.enclaive.cloud \
@@ -611,7 +630,6 @@ jobs:
             --set logging.format=$LOG_FORMAT \
             --set ingress.enabled=false \
             --force \
-            --debug \
             --timeout 10m \
             --wait
           
