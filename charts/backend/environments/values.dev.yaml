@@ -2,4 +2,39 @@
 
 replicaCount: 1
 
-# Override service-specific configurations here
+# Image configuration
+image:
+  repository: 886093416603.dkr.ecr.eu-central-1.amazonaws.com/backend0
+  tag: dev
+  pullPolicy: Always
+
+# Image pull secrets
+imagePullSecrets:
+  - name: aws-ecr-creds
+
+# Environment
+environment: dev
+
+# Logging
+logging:
+  level: debug
+  format: pretty
+
+# Features
+features:
+  enableBackups: false
+  enableWebhooks: true
+  enableCaching: true
+
+# MongoDB configuration
+mongodb:
+  host: mongodb
+  port: 27017
+  database: backend_db
+  username: root
+  password: root
+
+# Redis configuration
+redis:
+  host: redis
+  port: 6379
