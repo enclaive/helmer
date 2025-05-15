@@ -1,0 +1,31 @@
+# charts/frontend/environments/values.staging.yaml
+namespace: emcp-staging
+domain: staging.enclaive.cloud
+replicaCount: 1
+
+image:
+  repository: 886093416603.dkr.ecr.eu-central-1.amazonaws.com/frontend
+  tag: "staging"
+  pullPolicy: Always
+
+# Resources for staging environment
+resources:
+  limits:
+    cpu: 750m
+    memory: 1.5Gi
+  requests:
+    cpu: 200m
+    memory: 512Mi
+
+# API endpoints for staging
+api:
+  url: "https://emcp-staging.enclaive.cloud"
+auth:
+  url: "https://auth-staging.enclaive.cloud" 
+app:
+  url: "https://console-staging.enclaive.cloud"
+
+# Logging configuration for staging
+logging:
+  level: info
+  format: json

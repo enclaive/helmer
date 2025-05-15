@@ -2,14 +2,11 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: frontend
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ .Values.namespace }}
   labels:
     app: frontend
     {{- include "frontend.labels" . | nindent 4 }}
 spec:
-  persistentVolumeClaimRetentionPolicy:
-    whenDeleted: Retain
-    whenScaled: Retain
   podManagementPolicy: OrderedReady
   replicas: {{ .Values.replicaCount }}
   revisionHistoryLimit: 10
@@ -37,49 +34,40 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: NODE_ENV
+              value: {{ .Values.environment | default "production" }}
           livenessProbe:
-            failureThreshold: {{ .Values.probes.liveness.failureThreshold | default 10 }}
             httpGet:
               path: /
               port: 3000
-              scheme: HTTP
             initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds | default 30 }}
             periodSeconds: {{ .Values.probes.liveness.periodSeconds | default 10 }}
-            successThreshold: 1
-            timeoutSeconds: 3
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold | default 6 }}
           readinessProbe:
-            failureThreshold: {{ .Values.probes.readiness.failureThreshold | default 10 }}
             httpGet:
               path: /
               port: 3000
-              scheme: HTTP
             initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds | default 10 }}
             periodSeconds: {{ .Values.probes.readiness.periodSeconds | default 5 }}
-            successThreshold: 1
-            timeoutSeconds: 3
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold | default 3 }}
           ports:
             - containerPort: 3000
               name: web
               protocol: TCP
-          env:
-            - name: NODE_ENV
-              value: {{ .Values.environment | default "production" }}
-            - name: API_URL
-              value: {{ .Values.api.url | default "https://emcp-prod.enclaive.cloud" }}
-            - name: AUTH_URL
-              value: {{ .Values.auth.url | default "https://auth.enclaive.cloud" }}
-          envFrom:
-            - configMapRef:
-                name: frontend-config
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
+            - mountPath: /app/config
+              name: config-volume
             - name: frontend-cache
               mountPath: /app/.next/cache
-            {{- if .Values.persistence.enabled }}
-            - name: frontend-data
-              mountPath: /app/public/data
-            {{- end }}
+      volumes:
+        - name: config-volume
+          configMap:
+            name: frontend-config
+        - name: frontend-cache
+          emptyDir: {}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -92,20 +80,3 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      volumes:
-        - name: frontend-cache
-          emptyDir: {}
-  {{- if .Values.persistence.enabled }}
-  volumeClaimTemplates:
-    - apiVersion: v1
-      kind: PersistentVolumeClaim
-      metadata:
-        name: frontend-data
-      spec:
-        accessModes:
-          - ReadWriteOnce
-        resources:
-          requests:
-            storage: {{ .Values.persistence.size | default "1Gi" }}
-        storageClassName: {{ .Values.persistence.storageClass | default "longhorn" }}
-  {{- end }}
