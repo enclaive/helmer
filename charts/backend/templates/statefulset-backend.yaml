@@ -82,13 +82,6 @@ spec:
               protocol: TCP
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-          volumeMounts:
-            - mountPath: /server/config
-              name: config-volume
-      volumes:
-        - name: config-volume
-          configMap:
-            name: backend-config
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
