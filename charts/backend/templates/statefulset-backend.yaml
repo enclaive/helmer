@@ -7,9 +7,6 @@ metadata:
     app: backend
     {{- include "backend.labels" . | nindent 4 }}
 spec:
-  persistentVolumeClaimRetentionPolicy:
-    whenDeleted: Retain
-    whenScaled: Retain
   podManagementPolicy: OrderedReady
   replicas: {{ .Values.replicaCount }}
   revisionHistoryLimit: 10
@@ -67,7 +64,7 @@ spec:
             httpGet:
               path: /ping
               port: 8080
-            initialDelaySeconds: 60  # Increased for slower startup scenarios
+            initialDelaySeconds: 60
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 6
@@ -86,15 +83,6 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
-            - mountPath: /server/resources
-              name: backend
-              subPath: resources
-            - mountPath: /server/public
-              name: backend
-              subPath: public
-            - mountPath: /server/logs
-              name: backend
-              subPath: logs
             - mountPath: /server/config
               name: config-volume
       volumes:
@@ -117,16 +105,3 @@ spec:
     rollingUpdate:
       partition: 0
     type: RollingUpdate
-  volumeClaimTemplates:
-    - apiVersion: v1
-      kind: PersistentVolumeClaim
-      metadata:
-        name: backend
-      spec:
-        accessModes:
-          - ReadWriteOnce
-        resources:
-          requests:
-            storage: {{ .Values.persistence.size | default "1Gi" }}
-        storageClassName: {{ .Values.persistence.storageClass | default "longhorn" }}
-        volumeMode: Filesystem

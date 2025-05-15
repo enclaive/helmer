@@ -3,12 +3,6 @@
 # Load common functions and variables
 source "$(dirname "$0")/common.sh"
 
-# ECR configuration
-AWS_ACCOUNT_ID="886093416603"
-AWS_REGION="eu-central-1"
-ECR_REPO="admin"
-IMAGE_TAG="dev"  # Use simple tag
-
 echo "=== Deploying to DEVELOPMENT Environment ==="
 NAMESPACE="emcp-dev"
 
@@ -17,22 +11,22 @@ ensure_namespace "$NAMESPACE"
 
 # Create AWS ECR pull secret
 echo "Creating ECR pull credentials..."
-TOKEN=$(aws ecr get-login-password --region ${AWS_REGION})
+TOKEN=$(aws ecr get-login-password --region eu-central-1)
 kubectl create secret docker-registry aws-ecr-creds \
-  --docker-server=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com \
+  --docker-server=886093416603.dkr.ecr.eu-central-1.amazonaws.com \
   --docker-username=AWS \
   --docker-password="${TOKEN}" \
   --namespace=${NAMESPACE} \
   --dry-run=client -o yaml | kubectl apply -f -
 
-# Deploy Admin service from ECR
-echo "Deploying Admin service from ECR..."
+# Deploy Admin service
+echo "Deploying Admin service..."
 helm upgrade --install admin ./charts/admin \
   --namespace "$NAMESPACE" \
   --create-namespace \
   --values ./charts/admin/environments/values.dev.yaml \
-  --set image.repository="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}" \
-  --set image.tag="${IMAGE_TAG}" \
+  --set image.repository="886093416603.dkr.ecr.eu-central-1.amazonaws.com/admin" \
+  --set image.tag="dev" \
   --set image.pullPolicy=Always \
   --set imagePullSecrets[0].name=aws-ecr-creds \
   --set environment=dev \
@@ -43,5 +37,25 @@ helm upgrade --install admin ./charts/admin \
 
 # Check deployment status
 check_status "statefulset" "admin" "$NAMESPACE"
+
+# Deploy Backend service
+echo "Deploying Backend service..."
+helm upgrade --install backend ./charts/backend \
+  --namespace "$NAMESPACE" \
+  --create-namespace \
+  --values ./charts/backend/environments/values.dev.yaml \
+  --set image.repository="886093416603.dkr.ecr.eu-central-1.amazonaws.com/backend0" \
+  --set image.tag="dev" \
+  --set image.pullPolicy=Always \
+  --set imagePullSecrets[0].name=aws-ecr-creds \
+  --set environment=dev \
+  --set logging.level=debug \
+  --set logging.format=pretty \
+  --set features.enableBackups=false \
+  --timeout 10m \
+  --wait
+
+# Check deployment status
+check_status "statefulset" "backend" "$NAMESPACE"
 
 echo "=== DEV Deployment Complete ==="

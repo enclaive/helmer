@@ -1,15 +1,16 @@
+
 # Default values for backend
 # This is a YAML-formatted file.
 
 replicaCount: 1
 
 image:
-  repository: harbor.enclaive.cloud/emcp/backend
-  tag: latest
-  pullPolicy: IfNotPresent
+  repository: 886093416603.dkr.ecr.eu-central-1.amazonaws.com/backend0
+  tag: dev
+  pullPolicy: Always
 
 imagePullSecrets:
-  - name: harbor-creds
+  - name: aws-ecr-creds
 
 nameOverride: ""
 fullnameOverride: ""
@@ -43,9 +44,26 @@ tolerations: []
 
 affinity: {}
 
-persistence:
-  enabled: false
-  storageClass: "gp2"
-  size: 5Gi
+# Database configurations
+mongodb:
+  host: mongodb
+  port: 27017
+  database: backend_db
+  username: root
+  password: root
 
-# Environment-specific configurations should be in environments/[env].yaml
+# Redis configurations
+redis:
+  host: redis
+  port: 6379
+
+# Feature flags
+features:
+  enableBackups: false
+  enableWebhooks: true
+  enableCaching: true
+
+# Logging configuration
+logging:
+  level: info
+  format: json
