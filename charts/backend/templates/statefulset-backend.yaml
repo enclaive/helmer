@@ -1,0 +1,132 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: backend
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: backend
+    {{- include "backend.labels" . | nindent 4 }}
+spec:
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  podManagementPolicy: OrderedReady
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: backend
+  serviceName: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap-backend.yaml") . | sha256sum | quote }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: backend
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: NODE_ENV
+              value: {{ .Values.environment | default "production" }}
+            - name: MONGODB_DATABASE
+              value: {{ .Values.mongodb.database | default "backend_db" }}
+            - name: MONGODB_HOST
+              value: {{ .Values.mongodb.host | default "mongodb" }}
+            - name: MONGODB_PORT
+              value: {{ .Values.mongodb.port | default "27017" | quote }}
+            - name: MONGODB_USER
+              value: {{ .Values.mongodb.username | default "root" }}
+            - name: MONGODB_PASSWORD
+              value: {{ .Values.mongodb.password | default "root" }}
+            - name: REDIS_HOST
+              value: {{ .Values.redis.host | default "redis" }}
+            - name: REDIS_PORT
+              value: {{ .Values.redis.port | default "6379" | quote }}
+            {{- if .Values.secrets }}
+            {{- range $key, $value := .Values.secrets }}
+            - name: {{ $key }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $value.name }}
+                  key: {{ $value.key }}
+            {{- end }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: 8080
+            initialDelaySeconds: 60  # Increased for slower startup scenarios
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          ports:
+            - containerPort: 8080
+              name: web
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - mountPath: /server/resources
+              name: backend
+              subPath: resources
+            - mountPath: /server/public
+              name: backend
+              subPath: public
+            - mountPath: /server/logs
+              name: backend
+              subPath: logs
+            - mountPath: /server/config
+              name: config-volume
+      volumes:
+        - name: config-volume
+          configMap:
+            name: backend-config
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  updateStrategy:
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: backend
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size | default "1Gi" }}
+        storageClassName: {{ .Values.persistence.storageClass | default "longhorn" }}
+        volumeMode: Filesystem
