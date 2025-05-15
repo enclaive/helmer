@@ -59,10 +59,11 @@ jobs:
           echo "Selected environment: $ENVIRONMENT"
           echo "Using namespace: emcp-$ENVIRONMENT"
 
-  diagnostics:
-    name: Run Diagnostics
+  deploy-admin:
+    name: Deploy Admin to EKS
     runs-on: ubuntu-latest
     needs: set-environment
+    environment: ${{ needs.set-environment.outputs.environment }}
     
     steps:
       - name: Checkout code
@@ -79,147 +80,113 @@ jobs:
         run: |
           aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
           
-      - name: Harbor login
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'v3.12.0'
+          
+      # Create namespace first
+      - name: Create namespace
+        run: |
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          echo "Creating namespace $NAMESPACE if it doesn't exist..."
+          kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+          
+      # Harbor login using the docker/login-action
+      - name: Login to Harbor
         uses: docker/login-action@v3
         with:
           registry: harbor.enclaive.cloud
           username: ${{ secrets.HARBOR_USERNAME }}
           password: ${{ secrets.HARBOR_PASSWORD }}
-      
-      - name: Create diagnostic script
+          
+      # Create the Harbor credentials secret in Kubernetes
+      - name: Create Harbor credentials secret in Kubernetes
         run: |
-          cat > diagnostics.sh << 'EOF'
-          #!/bin/bash
-          # Diagnostic script for Harbor image pull issues
-
-          # Set namespace
-          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
-
-          echo "========================================================"
-          echo "DETAILED KUBERNETES DIAGNOSTICS FOR HARBOR PULL ISSUES"
-          echo "========================================================"
-
-          echo "1. CHECKING ALL PODS IN NAMESPACE $NAMESPACE"
-          kubectl get pods -n $NAMESPACE
-          echo ""
-
-          echo "2. CHECKING ALL SECRETS IN NAMESPACE $NAMESPACE"
-          kubectl get secrets -n $NAMESPACE | grep harbor
-          echo ""
-
-          echo "3. CHECKING HARBOR-CREDS SECRET DETAILS"
-          kubectl describe secret harbor-creds -n $NAMESPACE
-          echo ""
-
-          # Check if harbor-emcp-pull-secret exists, which is used by backend
-          if kubectl get secret harbor-emcp-pull-secret -n $NAMESPACE &>/dev/null; then
-            echo "4. CHECKING HARBOR-EMCP-PULL-SECRET DETAILS"
-            kubectl describe secret harbor-emcp-pull-secret -n $NAMESPACE
-          else
-            echo "4. HARBOR-EMCP-PULL-SECRET DOES NOT EXIST"
-          fi
-          echo ""
-
-          echo "5. DETAILED EVENTS FROM NAMESPACE (SORTED BY TIME)"
-          kubectl get events -n $NAMESPACE --sort-by='.lastTimestamp' | tail -n 30
-          echo ""
-
-          echo "6. DETAILED POD INFORMATION FOR ADMIN PODS"
-          ADMIN_PODS=$(kubectl get pods -n $NAMESPACE -l app=admin -o name)
-          for pod in $ADMIN_PODS; do
-            echo "Details for pod $pod:"
-            kubectl describe $pod -n $NAMESPACE
-            echo "---"
-          done
-
-          echo "7. CHECKING FOR BACKEND PODS (WHICH WORK)"
-          BACKEND_PODS=$(kubectl get pods -n $NAMESPACE -l app=backend -o name)
-          if [ -n "$BACKEND_PODS" ]; then
-            for pod in $BACKEND_PODS; do
-              echo "Working backend pod found: $pod"
-              echo "Image pull secrets configuration:"
-              kubectl get $pod -n $NAMESPACE -o jsonpath='{.spec.imagePullSecrets}'
-              echo ""
-            done
-          else
-            echo "No backend pods found in namespace $NAMESPACE"
-          fi
-          echo ""
-
-          echo "8. CHECKING FOR IMAGE PULL BACKOFFS"
-          kubectl get pods -n $NAMESPACE | grep -i "ImagePull\|ErrImage"
-          echo ""
-
-          echo "9. TESTING HARBOR TAG AVAILABILITY"
-          # Try to list the available tags in Harbor
-          TOKEN=$(curl -s -k -u "$HARBOR_USERNAME:$HARBOR_PASSWORD" "https://harbor.enclaive.cloud/service/token?service=harbor-registry&scope=repository:emcp/admin:pull" | jq -r '.token')
-          
-          if [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ]; then
-            echo "Available tags for emcp/admin repository:"
-            curl -s -k -H "Authorization: Bearer $TOKEN" "https://harbor.enclaive.cloud/v2/emcp/admin/tags/list" | jq
-          else
-            echo "Failed to obtain Harbor token or list tags"
-          fi
-          echo ""
-
-          echo "10. COMPARING SECRETS FORMAT"
-          # Extract and decode the docker config from both secrets if they exist
-          if kubectl get secret harbor-creds -n $NAMESPACE &>/dev/null; then
-            echo "harbor-creds docker config:"
-            kubectl get secret harbor-creds -n $NAMESPACE -o jsonpath='{.data.\.dockerconfigjson}' | base64 -d | jq .
-            echo ""
-          fi
-
-          if kubectl get secret harbor-emcp-pull-secret -n $NAMESPACE &>/dev/null; then
-            echo "harbor-emcp-pull-secret docker config:"
-            kubectl get secret harbor-emcp-pull-secret -n $NAMESPACE -o jsonpath='{.data.\.dockerconfigjson}' | base64 -d | jq .
-            echo ""
-          fi
-
-          echo "11. CHECKING REPOSITORY WITH NEW CREDENTIALS"
-          echo "Creating test secret with non-sha tag..."
-          
-          # Try to create a secret and test pod using shorter tag
-          kubectl create secret docker-registry harbor-test-secret \
+          # Create the secret
+          kubectl create secret docker-registry harbor-creds \
             --docker-server=harbor.enclaive.cloud \
-            --docker-username="$HARBOR_USERNAME" \
-            --docker-password="$HARBOR_PASSWORD" \
-            --namespace=$NAMESPACE \
+            --docker-username=${{ secrets.HARBOR_USERNAME }} \
+            --docker-password=${{ secrets.HARBOR_PASSWORD }} \
+            --namespace=${{ needs.set-environment.outputs.namespace }} \
             --dry-run=client -o yaml | kubectl apply -f -
-          
-          cat <<TEST | kubectl apply -f -
-          apiVersion: v1
-          kind: Pod
-          metadata:
-            name: admin-test-pod
-            namespace: $NAMESPACE
-            labels:
-              app: admin-test
-          spec:
-            containers:
-            - name: admin-test
-              image: harbor.enclaive.cloud/emcp/admin:dev
-              imagePullPolicy: Always
-            imagePullSecrets:
-            - name: harbor-test-secret
-            restartPolicy: Never
-          TEST
-          
-          echo "Waiting for test pod..."
-          sleep 15
-          kubectl get pod admin-test-pod -n $NAMESPACE
-          kubectl describe pod admin-test-pod -n $NAMESPACE
-          
-          echo "========================================================"
-          echo "DIAGNOSTICS COMPLETE"
-          echo "========================================================"
-          EOF
-          
-          chmod +x diagnostics.sh
       
-      - name: Run diagnostics
-        env:
-          HARBOR_USERNAME: ${{ secrets.HARBOR_USERNAME }}
-          HARBOR_PASSWORD: ${{ secrets.HARBOR_PASSWORD }}
+      - name: Set Admin image tag
+        id: set-tag
         run: |
-          ./diagnostics.sh
+          ENV="${{ needs.set-environment.outputs.environment }}"
+          
+          # Use simple tag names instead of SHA hashes - FIXED!
+          if [ "$ENV" == "prod" ]; then
+            TAG="prod"
+          elif [ "$ENV" == "staging" ]; then
+            TAG="staging"
+          elif [ "$ENV" == "dev" ]; then
+            TAG="dev"
+          fi
+          
+          echo "admin_tag=$TAG" >> $GITHUB_OUTPUT
+          echo "ADMIN_TAG=$TAG" >> $GITHUB_ENV
+          
+          echo "Using image tag: $TAG"
+      
+      # Deploy Admin service directly in the workflow instead of using scripts
+      - name: Deploy Admin Service
+        run: |
+          ENV="${{ needs.set-environment.outputs.environment }}"
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          
+          echo "Deploying Admin service to $NAMESPACE..."
+          
+          # Determine log level based on environment
+          if [ "$ENV" == "prod" ]; then
+            LOG_LEVEL="info"
+            LOG_FORMAT="json"
+          elif [ "$ENV" == "staging" ]; then
+            LOG_LEVEL="info"
+            LOG_FORMAT="json"
+          else
+            LOG_LEVEL="debug"
+            LOG_FORMAT="pretty"
+          fi
+          
+          # Deploy using Helm with proper tag
+          helm upgrade --install admin ./charts/admin \
+            --namespace $NAMESPACE \
+            --create-namespace \
+            --set namespace=$NAMESPACE \
+            --set domain=admin.enclaive.cloud \
+            --set environment=$ENV \
+            --set image.tag="${ADMIN_TAG}" \
+            --set image.pullPolicy=Always \
+            --set imagePullSecrets[0].name=harbor-creds \
+            --set logging.level=$LOG_LEVEL \
+            --set logging.format=$LOG_FORMAT \
+            --force \
+            --debug \
+            --timeout 10m \
+            --wait
+          
+          echo "Admin service deployed with image tag: ${ADMIN_TAG}"
+          
+      # Verify deployment status
+      - name: Verify Admin deployment
+        run: |
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          
+          echo "Verifying Admin deployment..."
+          kubectl rollout status statefulset/admin -n $NAMESPACE --timeout=300s || true
+          
+      - name: Report Admin deployment status
+        if: always()
+        run: |
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          
+          echo "=== Admin Deployment Status for ${{ needs.set-environment.outputs.environment }} ==="
+          echo "Admin: $(kubectl get statefulset admin -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
+          
+          echo "=== Admin Pod Status ==="
+          kubectl get pods -n $NAMESPACE -l app=admin
+          
+          echo "=== Admin Service Status ==="
+          kubectl get service admin -n $NAMESPACE
