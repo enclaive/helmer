@@ -15,7 +15,7 @@ helm upgrade --install admin ./charts/admin \
   --namespace "$NAMESPACE" \
   --create-namespace \
   --values ./charts/admin/environments/values.dev.yaml \
-  --set image.tag="${ADMIN_TAG:-dev-latest}" \
+  --set image.tag="dev" \
   --set imagePullSecrets[0].name=harbor-creds \
   --set environment=dev \
   --set logging.level=debug \
