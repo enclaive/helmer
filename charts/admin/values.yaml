@@ -12,7 +12,7 @@ replicaCount: 1
 
 image:
   repository: harbor.enclaive.cloud/emcp/admin
-  tag: latest
+  tag: dev
   pullPolicy: IfNotPresent
 
 imagePullSecrets:

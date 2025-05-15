@@ -100,34 +100,56 @@ jobs:
           username: ${{ secrets.HARBOR_USERNAME }}
           password: ${{ secrets.HARBOR_PASSWORD }}
           
-      # Create the Harbor credentials secret in Kubernetes
+      # Create the Harbor credentials secret in Kubernetes with properly formatted credentials
       - name: Create Harbor credentials secret in Kubernetes
         run: |
-          # Create the secret
-          kubectl create secret docker-registry harbor-creds \
-            --docker-server=harbor.enclaive.cloud \
-            --docker-username=${{ secrets.HARBOR_USERNAME }} \
-            --docker-password=${{ secrets.HARBOR_PASSWORD }} \
-            --namespace=${{ needs.set-environment.outputs.namespace }} \
+          # Create a properly formatted Docker config.json
+          DOCKER_AUTH=$(echo -n "${{ secrets.HARBOR_USERNAME }}:${{ secrets.HARBOR_PASSWORD }}" | base64)
+          DOCKER_CONFIG=$(cat <<EOF
+          {
+            "auths": {
+              "harbor.enclaive.cloud": {
+                "auth": "$DOCKER_AUTH"
+              }
+            }
+          }
+          EOF
+          )
+          
+          # Create the secret with the proper Docker config
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          echo "$DOCKER_CONFIG" | kubectl create secret generic harbor-creds \
+            --namespace=$NAMESPACE \
+            --from-file=.dockerconfigjson=/dev/stdin \
+            --type=kubernetes.io/dockerconfigjson \
             --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Verify the secret exists
+          kubectl get secret harbor-creds -n $NAMESPACE
       
       - name: Set Admin image tag
         id: set-tag
         run: |
           ENV="${{ needs.set-environment.outputs.environment }}"
           
+          # Use the same short tag format as your working service (dev, staging, prod)
           if [ "$ENV" == "prod" ]; then
-            TAG="prod-${{ github.sha }}"
+            TAG="prod"
+            LONG_TAG="prod-${{ github.sha }}"
           elif [ "$ENV" == "staging" ]; then
-            TAG="staging-${{ github.sha }}"
+            TAG="staging"
+            LONG_TAG="staging-${{ github.sha }}"
           elif [ "$ENV" == "dev" ]; then
-            TAG="dev-${{ github.sha }}"
+            TAG="dev"
+            LONG_TAG="dev-${{ github.sha }}"
           fi
           
           echo "admin_tag=$TAG" >> $GITHUB_OUTPUT
+          echo "admin_long_tag=$LONG_TAG" >> $GITHUB_OUTPUT
           echo "ADMIN_TAG=$TAG" >> $GITHUB_ENV
+          echo "ADMIN_LONG_TAG=$LONG_TAG" >> $GITHUB_ENV
       
-      # Deploy Admin service directly in the workflow instead of using scripts
+      # Deploy Admin service directly in the workflow using the simpler tag
       - name: Deploy Admin Service
         run: |
           ENV="${{ needs.set-environment.outputs.environment }}"
@@ -147,7 +169,7 @@ jobs:
             LOG_FORMAT="pretty"
           fi
           
-          # Deploy using Helm
+          # Deploy using Helm - note we're using the simple tag now (dev, staging, prod)
           helm upgrade --install admin ./charts/admin \
             --namespace $NAMESPACE \
             --create-namespace \
@@ -164,6 +186,23 @@ jobs:
             --wait
           
           echo "Admin service deployed"
+          
+      # Debug image pull issues
+      - name: Debug image pull
+        run: |
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          
+          echo "=== Checking pod status ==="
+          kubectl get pods -n $NAMESPACE -l app=admin -o wide
+          
+          echo "=== Checking pod details ==="
+          kubectl describe pods -n $NAMESPACE -l app=admin
+          
+          echo "=== Checking secret ==="
+          kubectl get secret harbor-creds -n $NAMESPACE -o yaml
+          
+          echo "=== Testing Harbor connectivity ==="
+          curl -I https://harbor.enclaive.cloud/v2/ || echo "Connectivity issue with Harbor"
           
       # Verify deployment status
       - name: Verify Admin deployment
