@@ -21,7 +21,7 @@ on:
 
 env:
   AWS_REGION: eu-central-1
-  EKS_CLUSTER_NAME: your-new-cluster-name
+  EKS_CLUSTER_NAME: emcp-eks-cluster
 
 jobs:
   set-environment:
