@@ -14,7 +14,7 @@ echo "Deploying Admin service..."
 helm upgrade --install admin ./charts/admin \
   --namespace "$NAMESPACE" \
   --create-namespace \
-  --values ./charts/admin/environments/dev.yaml \
+  --values ./charts/admin/environments/values.dev.yaml \
   --set image.tag="${ADMIN_TAG:-dev-latest}" \
   --set imagePullSecrets[0].name=harbor-creds \
   --set environment=dev \

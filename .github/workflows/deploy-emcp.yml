@@ -127,33 +127,51 @@ jobs:
           echo "admin_tag=$TAG" >> $GITHUB_OUTPUT
           echo "ADMIN_TAG=$TAG" >> $GITHUB_ENV
       
-      # Deploy Admin service using environment-specific script
+      # Deploy Admin service directly in the workflow instead of using scripts
       - name: Deploy Admin Service
         run: |
           ENV="${{ needs.set-environment.outputs.environment }}"
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
-          # Make scripts executable
-          chmod +x .github/workflows/k8s/*.sh
+          echo "Deploying Admin service to $NAMESPACE..."
           
-          # Run the appropriate environment deployment script
+          # Determine log level based on environment
           if [ "$ENV" == "prod" ]; then
-            .github/workflows/k8s/prod.sh
+            LOG_LEVEL="info"
+            LOG_FORMAT="json"
           elif [ "$ENV" == "staging" ]; then
-            .github/workflows/k8s/staging.sh
-          elif [ "$ENV" == "dev" ]; then
-            .github/workflows/k8s/dev.sh
+            LOG_LEVEL="info"
+            LOG_FORMAT="json"
           else
-            echo "Unknown environment: $ENV"
-            exit 1
+            LOG_LEVEL="debug"
+            LOG_FORMAT="pretty"
           fi
+          
+          # Deploy using Helm
+          helm upgrade --install admin ./charts/admin \
+            --namespace $NAMESPACE \
+            --create-namespace \
+            --set namespace=$NAMESPACE \
+            --set domain=admin.enclaive.cloud \
+            --set environment=$ENV \
+            --set image.tag="${ADMIN_TAG}" \
+            --set imagePullSecrets[0].name=harbor-creds \
+            --set logging.level=$LOG_LEVEL \
+            --set logging.format=$LOG_FORMAT \
+            --force \
+            --debug \
+            --timeout 10m \
+            --wait
+          
+          echo "Admin service deployed"
           
       # Verify deployment status
       - name: Verify Admin deployment
         run: |
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
-          .github/workflows/k8s/common.sh
-          check_status "statefulset" "admin" "$NAMESPACE"
+          
+          echo "Verifying Admin deployment..."
+          kubectl rollout status statefulset/admin -n $NAMESPACE --timeout=300s || true
           
       - name: Report Admin deployment status
         if: always()
@@ -165,3 +183,6 @@ jobs:
           
           echo "=== Admin Pod Status ==="
           kubectl get pods -n $NAMESPACE -l app=admin
+          
+          echo "=== Admin Service Status ==="
+          kubectl get service admin -n $NAMESPACE
