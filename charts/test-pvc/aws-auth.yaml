@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aws-auth
+  namespace: kube-system
+data:
+  mapRoles: |
+    - rolearn: arn:aws:iam::886093416603:role/some-role
+      username: system:node:{{EC2PrivateDNSName}}
+      groups:
+        - system:bootstrappers
+        - system:nodes
+  mapUsers: |
+    - userarn: arn:aws:iam::886093416603:user/github-actions-deploy
+      username: github-actions-deploy
+      groups:
+        - system:masters
+
+
+
+
+        eksctl create iamidentitymapping \
+  --cluster emcp-eks-cluster \
+  --region eu-central-1 \
+  --arn arn:aws:iam::886093416603:user/github-actions-deploy \
+  --username github-actions-deploy \
+  --group system:masters

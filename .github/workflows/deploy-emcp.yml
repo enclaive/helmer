@@ -21,7 +21,7 @@ on:
 
 env:
   AWS_REGION: eu-central-1
-  EKS_CLUSTER_NAME: emcp-eks-cluster
+  EKS_CLUSTER_NAME: your-new-cluster-name
 
 jobs:
   set-environment:
@@ -85,6 +85,13 @@ jobs:
         with:
           version: 'v3.12.0'
           
+      # Create namespace first
+      - name: Create namespace
+        run: |
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          echo "Creating namespace $NAMESPACE if it doesn't exist..."
+          kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+          
       # Harbor login using the docker/login-action
       - name: Login to Harbor
         uses: docker/login-action@v3
@@ -102,7 +109,7 @@ jobs:
             --docker-username=${{ secrets.HARBOR_USERNAME }} \
             --docker-password=${{ secrets.HARBOR_PASSWORD }} \
             --namespace=${{ needs.set-environment.outputs.namespace }} \
-            --dry-run=client -o yaml --validate=false | kubectl apply -f -
+            --dry-run=client -o yaml | kubectl apply -f -
       
       - name: Set Admin image tag
         id: set-tag
