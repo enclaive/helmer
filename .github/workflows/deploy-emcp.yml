@@ -1,4 +1,4 @@
-name: Deploy Admin to EKS
+name: Deploy Admin to EKS from ECR
 
 on:
   push:
@@ -22,6 +22,8 @@ on:
 env:
   AWS_REGION: eu-central-1
   EKS_CLUSTER_NAME: emcp-eks-cluster
+  AWS_ACCOUNT_ID: 886093416603
+  ECR_REPOSITORY: emcp
 
 jobs:
   set-environment:
@@ -91,32 +93,31 @@ jobs:
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           echo "Creating namespace $NAMESPACE if it doesn't exist..."
           kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
-          
-      # Harbor login using the docker/login-action
-      - name: Login to Harbor
-        uses: docker/login-action@v3
-        with:
-          registry: harbor.enclaive.cloud
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
-          
-      # Create the Harbor credentials secret in Kubernetes
-      - name: Create Harbor credentials secret in Kubernetes
+      
+      # Create AWS ECR pull secret
+      - name: Create ECR pull credentials
         run: |
-          # Create the secret
-          kubectl create secret docker-registry harbor-creds \
-            --docker-server=harbor.enclaive.cloud \
-            --docker-username=${{ secrets.HARBOR_USERNAME }} \
-            --docker-password=${{ secrets.HARBOR_PASSWORD }} \
-            --namespace=${{ needs.set-environment.outputs.namespace }} \
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          
+          # Get ECR login token
+          TOKEN=$(aws ecr get-login-password --region ${{ env.AWS_REGION }})
+          
+          # Create the Kubernetes secret for ECR
+          kubectl create secret docker-registry aws-ecr-creds \
+            --docker-server=${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com \
+            --docker-username=AWS \
+            --docker-password="$TOKEN" \
+            --namespace=$NAMESPACE \
             --dry-run=client -o yaml | kubectl apply -f -
+            
+          echo "Created ECR pull secret: aws-ecr-creds"
       
       - name: Set Admin image tag
         id: set-tag
         run: |
           ENV="${{ needs.set-environment.outputs.environment }}"
           
-          # Use simple tag names instead of SHA hashes - FIXED!
+          # Use simple tag names
           if [ "$ENV" == "prod" ]; then
             TAG="prod"
           elif [ "$ENV" == "staging" ]; then
@@ -125,18 +126,37 @@ jobs:
             TAG="dev"
           fi
           
-          echo "admin_tag=$TAG" >> $GITHUB_OUTPUT
-          echo "ADMIN_TAG=$TAG" >> $GITHUB_ENV
+          # Full ECR image path
+          ECR_IMAGE="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${TAG}"
           
-          echo "Using image tag: $TAG"
+          echo "admin_tag=$TAG" >> $GITHUB_OUTPUT
+          echo "admin_image=$ECR_IMAGE" >> $GITHUB_OUTPUT
+          echo "ADMIN_TAG=$TAG" >> $GITHUB_ENV
+          echo "ADMIN_IMAGE=$ECR_IMAGE" >> $GITHUB_ENV
+          
+          echo "Using image: $ECR_IMAGE"
+      
+      # Clean up any existing failed resources
+      - name: Clean up resources if needed
+        run: |
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          
+          # Check if there are any pods with ImagePull issues
+          if kubectl get pods -n $NAMESPACE -l app=admin | grep -E "ImagePull|ErrImage"; then
+            echo "Found pods with image pull issues. Cleaning up..."
+            kubectl delete pods -n $NAMESPACE -l app=admin --grace-period=0 --force || true
+            kubectl delete statefulset admin -n $NAMESPACE || true
+            sleep 5
+          fi
       
       # Deploy Admin service directly in the workflow instead of using scripts
       - name: Deploy Admin Service
         run: |
           ENV="${{ needs.set-environment.outputs.environment }}"
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          ECR_IMAGE="${ADMIN_IMAGE}"
           
-          echo "Deploying Admin service to $NAMESPACE..."
+          echo "Deploying Admin service to $NAMESPACE using $ECR_IMAGE..."
           
           # Determine log level based on environment
           if [ "$ENV" == "prod" ]; then
@@ -150,16 +170,17 @@ jobs:
             LOG_FORMAT="pretty"
           fi
           
-          # Deploy using Helm with proper tag
+          # Deploy using Helm with ECR image
           helm upgrade --install admin ./charts/admin \
             --namespace $NAMESPACE \
             --create-namespace \
             --set namespace=$NAMESPACE \
             --set domain=admin.enclaive.cloud \
             --set environment=$ENV \
+            --set image.repository="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}" \
             --set image.tag="${ADMIN_TAG}" \
             --set image.pullPolicy=Always \
-            --set imagePullSecrets[0].name=harbor-creds \
+            --set imagePullSecrets[0].name=aws-ecr-creds \
             --set logging.level=$LOG_LEVEL \
             --set logging.format=$LOG_FORMAT \
             --force \
@@ -167,7 +188,7 @@ jobs:
             --timeout 10m \
             --wait
           
-          echo "Admin service deployed with image tag: ${ADMIN_TAG}"
+          echo "Admin service deployed with image: ${ECR_IMAGE}"
           
       # Verify deployment status
       - name: Verify Admin deployment
@@ -187,6 +208,9 @@ jobs:
           
           echo "=== Admin Pod Status ==="
           kubectl get pods -n $NAMESPACE -l app=admin
+          
+          echo "=== Pod Details ==="
+          kubectl describe pod admin-0 -n $NAMESPACE
           
           echo "=== Admin Service Status ==="
           kubectl get service admin -n $NAMESPACE
