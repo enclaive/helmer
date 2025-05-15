@@ -6,7 +6,7 @@ source "$(dirname "$0")/common.sh"
 # ECR configuration
 AWS_ACCOUNT_ID="886093416603"
 AWS_REGION="eu-central-1"
-ECR_REPO="emcp"
+ECR_REPO="admin"
 IMAGE_TAG="dev"  # Use simple tag
 
 echo "=== Deploying to DEVELOPMENT Environment ==="
