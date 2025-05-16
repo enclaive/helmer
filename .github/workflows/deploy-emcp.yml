@@ -293,487 +293,77 @@ jobs:
           
           echo "Redis service deployed in namespace $NAMESPACE"
           
-      # Verify deployment status
+      # Verify deployment status with improved checks
       - name: Verify Redis deployment
         run: |
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
           echo "Verifying Redis deployment..."
-          kubectl rollout status statefulset/redis -n $NAMESPACE --timeout=300s || true
           
+          # Check if the StatefulSet exists
+          if ! kubectl get statefulset redis -n $NAMESPACE > /dev/null 2>&1; then
+            echo "Error: Redis StatefulSet not found"
+            exit 1
+          fi
+          
+          # Check if the pods are running using a more reliable method
+          MAX_ATTEMPTS=12
+          ATTEMPT=0
+          SLEEP_TIME=10
+          SUCCESS=false
+          
+          echo "Checking if Redis pods are ready..."
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            
+            # Get desired and ready replicas
+            DESIRED=$(kubectl get statefulset redis -n $NAMESPACE -o jsonpath='{.spec.replicas}')
+            READY=$(kubectl get statefulset redis -n $NAMESPACE -o jsonpath='{.status.readyReplicas}')
+            
+            echo "Redis pods: $READY/$DESIRED ready (attempt $ATTEMPT/$MAX_ATTEMPTS)"
+            
+            # Check if any pods exist
+            if [ -z "$READY" ]; then
+              READY=0
+            fi
+            
+            # Check if pods are running and ready
+            if [ "$READY" == "$DESIRED" ] && [ "$DESIRED" != "0" ]; then
+              # Further verify Redis is actually functioning by running a Redis command
+              if kubectl exec -n $NAMESPACE $(kubectl get pod -n $NAMESPACE -l app=redis -o jsonpath='{.items[0].metadata.name}') -- redis-cli ping | grep -q PONG; then
+                echo "✅ Redis is running and responding to commands correctly!"
+                SUCCESS=true
+                break
+              else
+                echo "Redis pod is ready but not responding to commands yet. Waiting..."
+              fi
+            fi
+            
+            echo "Waiting for Redis to be ready... (${ATTEMPT}/${MAX_ATTEMPTS})"
+            sleep $SLEEP_TIME
+          done
+          
+          if [ "$SUCCESS" != "true" ]; then
+            echo "Timed out waiting for Redis to be ready. Collecting diagnostic information..."
+            kubectl describe statefulset redis -n $NAMESPACE
+            kubectl get pods -n $NAMESPACE -l app=redis -o wide
+            kubectl describe pods -n $NAMESPACE -l app=redis
+            exit 1
+          fi
+      
       - name: Report Redis deployment status
         if: always()
         run: |
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
           echo "=== Redis Deployment Status for ${{ needs.set-environment.outputs.environment }} ==="
-          echo "Redis: $(kubectl get statefulset redis -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
+          kubectl get statefulset redis -n $NAMESPACE
           
           echo "=== Redis Pod Status ==="
           kubectl get pods -n $NAMESPACE -l app=redis
           
           echo "=== Redis Service Status ==="
           kubectl get service redis -n $NAMESPACE
-
-  deploy-admin:
-    name: Deploy Admin to EKS
-    needs: [set-environment, check-changes, deploy-redis]
-    if: |
-      always() && 
-      (needs.check-changes.outputs.admin_changed == 'true' || 
-       needs.check-changes.outputs.workflow_changed == 'true')
-    runs-on: ubuntu-latest
-    environment: ${{ needs.set-environment.outputs.environment }}
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-        
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
           
-      - name: Update kubeconfig
-        run: |
-          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
-          
-      - name: Set up Helm
-        uses: azure/setup-helm@v3
-        with:
-          version: 'v3.12.0'
-          
-      # Create namespace first
-      - name: Create namespace
-        run: |
-          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
-          echo "Creating namespace $NAMESPACE if it doesn't exist..."
-          kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
-      
-      # Create AWS ECR pull secret
-      - name: Create ECR pull credentials
-        run: |
-          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
-          
-          # Get ECR login token
-          TOKEN=$(aws ecr get-login-password --region ${{ env.AWS_REGION }})
-          
-          # Create the Kubernetes secret for ECR
-          kubectl create secret docker-registry aws-ecr-creds \
-            --docker-server=${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com \
-            --docker-username=AWS \
-            --docker-password="$TOKEN" \
-            --namespace=$NAMESPACE \
-            --dry-run=client -o yaml | kubectl apply -f -
-            
-          echo "Created ECR pull secret: aws-ecr-creds"
-      
-      - name: Set Admin image tag
-        id: set-tag
-        run: |
-          ENV="${{ needs.set-environment.outputs.environment }}"
-          
-          # Use simple tag names
-          if [ "$ENV" == "prod" ]; then
-            TAG="prod"
-          elif [ "$ENV" == "staging" ]; then
-            TAG="staging"
-          elif [ "$ENV" == "dev" ]; then
-            TAG="dev"
-          fi
-          
-          # Full ECR image path
-          ECR_IMAGE="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/admin:${TAG}"
-          
-          echo "admin_tag=$TAG" >> $GITHUB_OUTPUT
-          echo "admin_image=$ECR_IMAGE" >> $GITHUB_OUTPUT
-          echo "ADMIN_TAG=$TAG" >> $GITHUB_ENV
-          echo "ADMIN_IMAGE=$ECR_IMAGE" >> $GITHUB_ENV
-          
-          echo "Using image: $ECR_IMAGE"
-      
-      # Deploy Admin service directly in the workflow instead of using scripts
-      - name: Deploy Admin Service
-        run: |
-          ENV="${{ needs.set-environment.outputs.environment }}"
-          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
-          ECR_IMAGE="${ADMIN_IMAGE}"
-          
-          echo "Deploying Admin service to $NAMESPACE using $ECR_IMAGE..."
-          
-          # Determine log level based on environment
-          if [ "$ENV" == "prod" ]; then
-            LOG_LEVEL="info"
-            LOG_FORMAT="json"
-          elif [ "$ENV" == "staging" ]; then
-            LOG_LEVEL="info"
-            LOG_FORMAT="json"
-          else
-            LOG_LEVEL="debug"
-            LOG_FORMAT="pretty"
-          fi
-          
-          # Deploy using Helm with ECR image
-          helm upgrade --install admin ./charts/admin \
-            --namespace $NAMESPACE \
-            --values ./charts/admin/environments/values.${ENV}.yaml \
-            --set namespace=$NAMESPACE \
-            --set domain=admin.enclaive.cloud \
-            --set environment=$ENV \
-            --set image.repository="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/admin" \
-            --set image.tag="${ADMIN_TAG}" \
-            --set image.pullPolicy=Always \
-            --set imagePullSecrets[0].name=aws-ecr-creds \
-            --set logging.level=$LOG_LEVEL \
-            --set logging.format=$LOG_FORMAT \
-            --force \
-            --timeout 10m \
-            --wait
-          
-          echo "Admin service deployed with image: ${ECR_IMAGE}"
-          
-      # Verify deployment status
-      - name: Verify Admin deployment
-        run: |
-          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
-          
-          echo "Verifying Admin deployment..."
-          kubectl rollout status statefulset/admin -n $NAMESPACE --timeout=300s || true
-          
-      - name: Report Admin deployment status
-        if: always()
-        run: |
-          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
-          
-          echo "=== Admin Deployment Status for ${{ needs.set-environment.outputs.environment }} ==="
-          echo "Admin: $(kubectl get statefulset admin -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
-          
-          echo "=== Admin Pod Status ==="
-          kubectl get pods -n $NAMESPACE -l app=admin
-          
-          echo "=== Pod Details ==="
-          # First check if the pod exists before trying to describe it
-          if kubectl get pod admin-0 -n $NAMESPACE &>/dev/null; then
-            kubectl describe pod admin-0 -n $NAMESPACE
-          else
-            echo "Admin pod not found. Deployment may have failed or not started yet."
-          fi
-          
-          echo "=== Admin Service Status ==="
-          kubectl get service admin -n $NAMESPACE
-
-  deploy-backend:
-    name: Deploy Backend to EKS
-    needs: [set-environment, check-changes, deploy-redis, deploy-admin]
-    if: |
-      always() && 
-      (needs.check-changes.outputs.backend_changed == 'true' || 
-       needs.check-changes.outputs.workflow_changed == 'true')
-    runs-on: ubuntu-latest
-    environment: ${{ needs.set-environment.outputs.environment }}
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-        
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-          
-      - name: Update kubeconfig
-        run: |
-          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
-          
-      - name: Set up Helm
-        uses: azure/setup-helm@v3
-        with:
-          version: 'v3.12.0'
-      
-      # Create AWS ECR pull secret (in case admin job failed)
-      - name: Create ECR pull credentials
-        run: |
-          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
-          
-          # Get ECR login token
-          TOKEN=$(aws ecr get-login-password --region ${{ env.AWS_REGION }})
-          
-          # Create the Kubernetes secret for ECR
-          kubectl create secret docker-registry aws-ecr-creds \
-            --docker-server=${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com \
-            --docker-username=AWS \
-            --docker-password="$TOKEN" \
-            --namespace=$NAMESPACE \
-            --dry-run=client -o yaml | kubectl apply -f -
-            
-          echo "Created ECR pull secret: aws-ecr-creds"
-      
-      - name: Set Backend image tag
-        id: set-tag
-        run: |
-          ENV="${{ needs.set-environment.outputs.environment }}"
-          
-          # Use simple tag names
-          if [ "$ENV" == "prod" ]; then
-            TAG="prod"
-          elif [ "$ENV" == "staging" ]; then
-            TAG="staging"
-          elif [ "$ENV" == "dev" ]; then
-            TAG="dev"
-          fi
-          
-          # Full ECR image path
-          ECR_IMAGE="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/backend0:${TAG}"
-          
-          echo "backend_tag=$TAG" >> $GITHUB_OUTPUT
-          echo "backend_image=$ECR_IMAGE" >> $GITHUB_OUTPUT
-          echo "BACKEND_TAG=$TAG" >> $GITHUB_ENV
-          echo "BACKEND_IMAGE=$ECR_IMAGE" >> $GITHUB_ENV
-          
-          echo "Using image: $ECR_IMAGE"
-      
-      # Deploy Backend service
-      - name: Deploy Backend Service
-        run: |
-          ENV="${{ needs.set-environment.outputs.environment }}"
-          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
-          ECR_IMAGE="${BACKEND_IMAGE}"
-          
-          echo "Deploying Backend service to $NAMESPACE using $ECR_IMAGE..."
-          
-          # Determine log level based on environment
-          if [ "$ENV" == "prod" ]; then
-            LOG_LEVEL="info"
-            LOG_FORMAT="json"
-          elif [ "$ENV" == "staging" ]; then
-            LOG_LEVEL="info"
-            LOG_FORMAT="json"
-          else
-            LOG_LEVEL="debug"
-            LOG_FORMAT="pretty"
-          fi
-          
-          # Deploy using Helm with ECR image
-          helm upgrade --install backend ./charts/backend \
-            --namespace $NAMESPACE \
-            --values ./charts/backend/environments/values.${ENV}.yaml \
-            --set namespace=$NAMESPACE \
-            --set environment=$ENV \
-            --set image.repository="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/backend0" \
-            --set image.tag="${BACKEND_TAG}" \
-            --set image.pullPolicy=Always \
-            --set imagePullSecrets[0].name=aws-ecr-creds \
-            --set logging.level=$LOG_LEVEL \
-            --set logging.format=$LOG_FORMAT \
-            --set features.enableBackups=false \
-            --set mongodb.host=mongodb \
-            --set mongodb.port=27017 \
-            --set mongodb.database=backend_db \
-            --set mongodb.username=root \
-            --set mongodb.password=root \
-            --set redis.host=redis \
-            --set redis.port=6379 \
-            --force \
-            --timeout 10m \
-            --wait
-          
-          echo "Backend service deployed with image: ${ECR_IMAGE}"
-          
-      # Verify deployment status
-      - name: Verify Backend deployment
-        run: |
-          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
-          
-          echo "Verifying Backend deployment..."
-          kubectl rollout status statefulset/backend -n $NAMESPACE --timeout=300s || true
-          
-      - name: Report Backend deployment status
-        if: always()
-        run: |
-          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
-          
-          echo "=== Backend Deployment Status for ${{ needs.set-environment.outputs.environment }} ==="
-          echo "Backend: $(kubectl get statefulset backend -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
-          
-          echo "=== Backend Pod Status ==="
-          kubectl get pods -n $NAMESPACE -l app=backend || echo "No backend pods found"
-          
-          echo "=== Pod Details ==="
-          # First check if the pod exists before trying to describe it
-          if kubectl get pod backend-0 -n $NAMESPACE &>/dev/null; then
-            kubectl describe pod backend-0 -n $NAMESPACE
-          else
-            echo "Backend pod not found. Deployment may have failed or not started yet."
-          fi
-          
-          echo "=== Backend Service Status ==="
-          kubectl get service backend -n $NAMESPACE || echo "No backend service found"
-
-  deploy-frontend:
-    name: Deploy Frontend to EKS
-    needs: [set-environment, check-changes, deploy-backend]
-    if: |
-      always() && 
-      (needs.check-changes.outputs.frontend_changed == 'true' || 
-       needs.check-changes.outputs.workflow_changed == 'true')
-    runs-on: ubuntu-latest
-    environment: ${{ needs.set-environment.outputs.environment }}
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-        
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-          
-      - name: Update kubeconfig
-        run: |
-          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
-          
-      - name: Set up Helm
-        uses: azure/setup-helm@v3
-        with:
-          version: 'v3.12.0'
-      
-      # Create AWS ECR pull secret (in case previous jobs failed)
-      - name: Create ECR pull credentials
-        run: |
-          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
-          
-          # Get ECR login token
-          TOKEN=$(aws ecr get-login-password --region ${{ env.AWS_REGION }})
-          
-          # Create the Kubernetes secret for ECR
-          kubectl create secret docker-registry aws-ecr-creds \
-            --docker-server=${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com \
-            --docker-username=AWS \
-            --docker-password="$TOKEN" \
-            --namespace=$NAMESPACE \
-            --dry-run=client -o yaml | kubectl apply -f -
-            
-          echo "Created ECR pull secret: aws-ecr-creds"
-      
-      - name: Set Frontend image tag
-        id: set-tag
-        run: |
-          ENV="${{ needs.set-environment.outputs.environment }}"
-          
-          # Use simple tag names
-          if [ "$ENV" == "prod" ]; then
-            TAG="prod"
-          elif [ "$ENV" == "staging" ]; then
-            TAG="staging"
-          elif [ "$ENV" == "dev" ]; then
-            TAG="dev"
-          fi
-          
-          # Full ECR image path
-          ECR_IMAGE="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/frontend:${TAG}"
-          
-          echo "frontend_tag=$TAG" >> $GITHUB_OUTPUT
-          echo "frontend_image=$ECR_IMAGE" >> $GITHUB_OUTPUT
-          echo "FRONTEND_TAG=$TAG" >> $GITHUB_ENV
-          echo "FRONTEND_IMAGE=$ECR_IMAGE" >> $GITHUB_ENV
-          
-          echo "Using image: $ECR_IMAGE"
-      
-      # Clean up any existing failed resources and TLS secrets causing errors
-      - name: Clean up resources if needed
-        run: |
-          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
-          
-          # First, remove any problematic TLS secrets
-          echo "Removing any problematic TLS secrets..."
-          kubectl delete secret frontend-ingress-tls -n $NAMESPACE --ignore-not-found
-          kubectl delete secret frontend-prianto-ingress-tls -n $NAMESPACE --ignore-not-found
-          kubectl delete secret frontend-govtech-ingress-tls -n $NAMESPACE --ignore-not-found
-          
-          # Clean up any existing frontend StatefulSet (from previous versions)
-          if kubectl get statefulset frontend -n $NAMESPACE &>/dev/null; then
-            echo "Found old frontend StatefulSet. Removing..."
-            kubectl delete statefulset frontend -n $NAMESPACE
-            
-            # Wait for resources to be fully removed
-            echo "Waiting for resources to be fully removed..."
-            sleep 10
-          fi
-      
-      # Deploy Frontend service
-      - name: Deploy Frontend Service
-        run: |
-          ENV="${{ needs.set-environment.outputs.environment }}"
-          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
-          ECR_IMAGE="${FRONTEND_IMAGE}"
-          
-          echo "Deploying Frontend service to $NAMESPACE using $ECR_IMAGE..."
-          
-          # Determine log level based on environment
-          if [ "$ENV" == "prod" ]; then
-            LOG_LEVEL="info"
-            LOG_FORMAT="json"
-          elif [ "$ENV" == "staging" ]; then
-            LOG_LEVEL="info"
-            LOG_FORMAT="json"
-          else
-            LOG_LEVEL="debug"
-            LOG_FORMAT="pretty"
-          fi
-          
-          # Deploy using Helm with ECR image
-          helm upgrade --install frontend ./charts/frontend \
-            --namespace $NAMESPACE \
-            --values ./charts/frontend/environments/values.${ENV}.yaml \
-            --set namespace=$NAMESPACE \
-            --set domain=console.enclaive.cloud \
-            --set environment=$ENV \
-            --set image.repository="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/frontend" \
-            --set image.tag="${FRONTEND_TAG}" \
-            --set image.pullPolicy=Always \
-            --set imagePullSecrets[0].name=aws-ecr-creds \
-            --set logging.level=$LOG_LEVEL \
-            --set logging.format=$LOG_FORMAT \
-            --set ingress.enabled=false \
-            --force \
-            --timeout 10m \
-            --wait
-          
-          echo "Frontend service deployed with image: ${ECR_IMAGE}"
-          
-      # Verify deployment status
-      - name: Verify Frontend deployment
-        run: |
-          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
-          
-          echo "Verifying Frontend deployment..."
-          kubectl rollout status deployment/frontend -n $NAMESPACE --timeout=300s || true
-          
-      - name: Report Frontend deployment status
-        if: always()
-        run: |
-          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
-          
-          echo "=== Frontend Deployment Status for ${{ needs.set-environment.outputs.environment }} ==="
-          echo "Frontend: $(kubectl get deployment frontend -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
-          
-          echo "=== Frontend Pod Status ==="
-          kubectl get pods -n $NAMESPACE -l app=frontend || echo "No frontend pods found"
-          
-          echo "=== Pod Details ==="
-          # Get the first pod name instead of using a fixed name pattern
-          FRONTEND_POD=$(kubectl get pods -n $NAMESPACE -l app=frontend -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-          if [[ -n "$FRONTEND_POD" ]]; then
-            kubectl describe pod $FRONTEND_POD -n $NAMESPACE
-          else
-            echo "Frontend pod not found. Deployment may have failed or not started yet."
-          fi
-          
-          echo "=== Frontend Service Status ==="
-          kubectl get service frontend -n $NAMESPACE || echo "No frontend service found"
+          echo "=== Redis PVC Status ==="
+          kubectl get pvc -n $NAMESPACE -l app=redis
