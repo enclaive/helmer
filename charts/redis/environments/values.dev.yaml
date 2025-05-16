@@ -1,23 +1,18 @@
-# Values specific to dev environment
+# This file should be saved as 'charts/redis/environments/values.dev.yaml'
+
 namespace: emcp-dev
 replicaCount: 1
 
 image:
   repository: redis
   tag: "6.2-alpine"
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
 
-# Redis configuration
-redis:
+service:
+  type: ClusterIP
   port: 6379
-  password: ""  # Should use a secret in production
-  config:
-    maxmemory: "128mb"
-    maxmemory-policy: "allkeys-lru"
-    appendonly: "yes"
-    appendfsync: "everysec"
+  targetPort: 6379
 
-# Resources for dev environment
 resources:
   limits:
     cpu: 200m
@@ -26,28 +21,34 @@ resources:
     cpu: 100m
     memory: 128Mi
 
-# Persistence config for dev
+redis:
+  port: 6379
+  config:
+    maxmemory: "128mb"
+    maxmemory-policy: "allkeys-lru"
+    appendonly: "yes"
+    appendfsync: "everysec"
+  password: ""
+
 persistence:
   enabled: true
   storageClass: "openebs-hostpath"
-  accessMode: ReadWriteOnce
-  size: 1Gi
+  size: 512Mi
 
-# Service configuration
-service:
-  type: ClusterIP
-  port: 6379
-  targetPort: 6379
-
-# Health check probes
 probes:
   liveness:
     initialDelaySeconds: 30
     periodSeconds: 10
     timeoutSeconds: 5
-    failureThreshold: 6
+    failureThreshold: 3
   readiness:
     initialDelaySeconds: 5
-    periodSeconds: 5
-    timeoutSeconds: 3
+    periodSeconds: 10
+    timeoutSeconds: 5
     failureThreshold: 3
+
+podSecurityContext: {}
+securityContext: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

@@ -12,11 +12,10 @@ data:
     port {{ .Values.redis.port }}
     bind 0.0.0.0
     protected-mode yes
-    
     # Memory management
     maxmemory {{ .Values.redis.config.maxmemory }}
     maxmemory-policy {{ .Values.redis.config.maxmemory-policy }}
-    
+
     # Persistence
     {{- if eq .Values.redis.config.appendonly "yes" }}
     appendonly yes
@@ -24,17 +23,17 @@ data:
     {{- else }}
     appendonly no
     {{- end }}
-    
+
     # Password (if provided)
     {{- if .Values.redis.password }}
     requirepass {{ .Values.redis.password }}
     {{- end }}
-    
+
     # Performance tuning
     tcp-backlog 511
     timeout 0
     tcp-keepalive 300
-    
+
     # Logging
     loglevel notice
     logfile ""

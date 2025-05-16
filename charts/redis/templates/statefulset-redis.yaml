@@ -44,13 +44,13 @@ spec:
           livenessProbe:
             exec:
               command:
-              - sh
-              - -c
-              {{- if .Values.redis.password }}
-              - redis-cli -a {{ .Values.redis.password }} ping | grep PONG
-              {{- else }}
-              - redis-cli ping | grep PONG
-              {{- end }}
+                - sh
+                - -c
+                {{- if .Values.redis.password }}
+                - redis-cli -a {{ .Values.redis.password }} ping | grep PONG
+                {{- else }}
+                - redis-cli ping | grep PONG
+                {{- end }}
             initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
             periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
             timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
@@ -58,13 +58,13 @@ spec:
           readinessProbe:
             exec:
               command:
-              - sh
-              - -c
-              {{- if .Values.redis.password }}
-              - redis-cli -a {{ .Values.redis.password }} ping | grep PONG
-              {{- else }}
-              - redis-cli ping | grep PONG
-              {{- end }}
+                - sh
+                - -c
+                {{- if .Values.redis.password }}
+                - redis-cli -a {{ .Values.redis.password }} ping | grep PONG
+                {{- else }}
+                - redis-cli ping | grep PONG
+                {{- end }}
             initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
             periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
             timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
@@ -82,20 +82,14 @@ spec:
         - name: config
           configMap:
             name: redis-config
-        {{- if .Values.persistence.enabled }}
-        - name: data
-          persistentVolumeClaim:
-            claimName: redis-data
-        {{- end }}
-      {{- with .Values.nodeSelector }}
-      nodeSelector:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.affinity }}
-      affinity:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.tolerations }}
-      tolerations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+  {{- if .Values.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: {{ .Values.persistence.storageClass }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size }}
+  {{- end }}
