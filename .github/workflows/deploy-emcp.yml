@@ -251,66 +251,45 @@ jobs:
           
           echo "Deploying Redis service to $NAMESPACE with tag $REDIS_TAG..."
           
-          # Create a temporary values file for this deployment
-          cat > /tmp/redis-values.yaml << EOF
-namespace: $NAMESPACE
-replicaCount: 1
-
-image:
-  repository: redis
-  tag: "${REDIS_TAG}"
-  pullPolicy: Always
-
-service:
-  type: ClusterIP
-  port: 6379
-  targetPort: 6379
-
-resources:
-  limits:
-    cpu: 200m
-    memory: 256Mi
-  requests:
-    cpu: 100m
-    memory: 128Mi
-
-redis:
-  port: 6379
-  config:
-    maxmemory: "128mb"
-    maxmemory-policy: "allkeys-lru"
-    appendonly: "yes"
-    appendfsync: "everysec"
-  password: ""
-
-persistence:
-  enabled: true
-  storageClass: "${REDIS_STORAGE_CLASS}"
-  size: "${REDIS_STORAGE_SIZE}"
-
-probes:
-  liveness:
-    initialDelaySeconds: 30
-    periodSeconds: 10
-    timeoutSeconds: 5
-    failureThreshold: 3
-  readiness:
-    initialDelaySeconds: 5
-    periodSeconds: 10
-    timeoutSeconds: 5
-    failureThreshold: 3
-EOF
-
-          # Show the values file for debugging
-          echo "Using the following Redis values:"
-          cat /tmp/redis-values.yaml
-          
-          # Deploy using Helm
-          helm upgrade --install redis ./charts/redis \
-            --namespace $NAMESPACE \
-            --values /tmp/redis-values.yaml \
-            --timeout 10m \
-            --wait
+          # Deploy using environment-specific values file
+          if [ -f "./charts/redis/environments/values.${ENV}.yaml" ]; then
+            echo "Using environment-specific values file: values.${ENV}.yaml"
+            helm upgrade --install redis ./charts/redis \
+              --namespace $NAMESPACE \
+              --values ./charts/redis/environments/values.${ENV}.yaml \
+              --set namespace=$NAMESPACE \
+              --set image.repository=redis \
+              --set image.tag=$REDIS_TAG \
+              --set persistence.storageClass=$REDIS_STORAGE_CLASS \
+              --set persistence.size=$REDIS_STORAGE_SIZE \
+              --timeout 10m \
+              --wait
+          else
+            echo "Environment-specific values file not found, using inline configuration"
+            helm upgrade --install redis ./charts/redis \
+              --namespace $NAMESPACE \
+              --set namespace=$NAMESPACE \
+              --set image.repository=redis \
+              --set image.tag=$REDIS_TAG \
+              --set image.pullPolicy=Always \
+              --set service.type=ClusterIP \
+              --set service.port=6379 \
+              --set service.targetPort=6379 \
+              --set redis.port=6379 \
+              --set redis.config.maxmemory="128mb" \
+              --set redis.config.maxmemory-policy="allkeys-lru" \
+              --set redis.config.appendonly="yes" \
+              --set redis.config.appendfsync="everysec" \
+              --set persistence.enabled=true \
+              --set persistence.storageClass=$REDIS_STORAGE_CLASS \
+              --set persistence.size=$REDIS_STORAGE_SIZE \
+              --set resources.limits.cpu=200m \
+              --set resources.limits.memory=256Mi \
+              --set resources.requests.cpu=100m \
+              --set resources.requests.memory=128Mi \
+              --timeout 10m \
+              --wait
+          fi
           
           echo "Redis service deployed in namespace $NAMESPACE"
           
