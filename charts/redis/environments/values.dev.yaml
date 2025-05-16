@@ -1,5 +1,3 @@
-# This file should be saved as 'charts/redis/environments/values.dev.yaml'
-
 namespace: emcp-dev
 replicaCount: 1
 
@@ -25,7 +23,7 @@ redis:
   port: 6379
   config:
     maxmemory: "128mb"
-    maxmemory-policy: "allkeys-lru"
+    maxmemoryPolicy: "allkeys-lru"  # Note: no hyphens in property name
     appendonly: "yes"
     appendfsync: "everysec"
   password: ""
@@ -33,7 +31,8 @@ redis:
 persistence:
   enabled: true
   storageClass: "openebs-hostpath"
-  size: 512Mi
+  size: "512Mi"
+  accessMode: "ReadWriteOnce"  # This was missing - explicit accessMode
 
 probes:
   liveness:
@@ -46,9 +45,3 @@ probes:
     periodSeconds: 10
     timeoutSeconds: 5
     failureThreshold: 3
-
-podSecurityContext: {}
-securityContext: {}
-nodeSelector: {}
-tolerations: []
-affinity: {}
