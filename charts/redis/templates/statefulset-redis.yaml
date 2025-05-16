@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+name: redis
+namespace: {{ .Release.Namespace }}
+labels:
+app: redis
+{{- include "redis.labels" . | nindent 4 }}
+spec:
+serviceName: redis
+replicas: {{ .Values.replicaCount }}
+selector:
+matchLabels:
+app: redis
+template:
+metadata:
+labels:
+app: redis
+annotations:
+checksum/config: {{ include (print $.Template.BasePath "/configmap-redis.yaml") . | sha256sum | quote }}
+{{- with .Values.podAnnotations }}
+{{- toYaml . | nindent 8 }}
+{{- end }}
+spec:
+{{- with .Values.imagePullSecrets }}
+imagePullSecrets:
+{{- toYaml . | nindent 8 }}
+{{- end }}
+securityContext:
+{{- toYaml .Values.podSecurityContext | nindent 8 }}
+containers:
+- name: redis
+securityContext:
+{{- toYaml .Values.securityContext | nindent 12 }}
+image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+imagePullPolicy: {{ .Values.image.pullPolicy }}
+command:
+- redis-server
+- "/etc/redis/redis.conf"
+ports:
+- name: redis
+containerPort: {{ .Values.redis.port }}
+protocol: TCP
+livenessProbe:
+exec:
+command:
+- sh
+- -c
+{{- if .Values.redis.password }}
+- redis-cli -a {{ .Values.redis.password }} ping | grep PONG
+{{- else }}
+- redis-cli ping | grep PONG
+{{- end }}
+initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+readinessProbe:
+exec:
+command:
+- sh
+- -c
+{{- if .Values.redis.password }}
+- redis-cli -a {{ .Values.redis.password }} ping | grep PONG
+{{- else }}
+- redis-cli ping | grep PONG
+{{- end }}
+initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+resources:
+{{- toYaml .Values.resources | nindent 12 }}
+volumeMounts:
+- name: config
+mountPath: /etc/redis
+{{- if .Values.persistence.enabled }}
+- name: data
+mountPath: /data
+{{- end }}
+volumes:
+- name: config
+configMap:
+name: redis-config
+{{- if .Values.persistence.enabled }}
+- name: data
+persistentVolumeClaim:
+claimName: redis-data
+{{- end }}
+{{- with .Values.nodeSelector }}
+nodeSelector:
+{{- toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.affinity }}
+affinity:
+{{- toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.tolerations }}
+tolerations:
+{{- toYaml . | nindent 8 }}
+{{- end }}

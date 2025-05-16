@@ -1,0 +1,18 @@
+namespace: emcp-dev
+replicaCount: 1
+
+image:
+  tag: "6.2-alpine"
+
+ resources:
+  limits:
+  cpu: 200m
+  memory: 256Mi
+  requests:
+  cpu: 100m
+  memory: 128Mi
+
+persistence:
+  enabled: true
+  storageClass: "openebs-hostpath"
+  size: 512mi
