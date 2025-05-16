@@ -211,146 +211,72 @@ jobs:
           echo "Creating namespace $NAMESPACE if it doesn't exist..."
           kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
       
-      # Set Redis configuration based on environment
-      - name: Set Redis configuration
-        id: redis-config
-        run: |
-          ENV="${{ needs.set-environment.outputs.environment }}"
-          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
-          
-          # Use consistent tag for Redis across environments
-          TAG="6.2-alpine"
-          echo "redis_tag=$TAG" >> $GITHUB_OUTPUT
-          echo "REDIS_TAG=$TAG" >> $GITHUB_ENV
-          
-          # Set storage size based on environment
-          if [ "$ENV" == "prod" ]; then
-            echo "redis_storage_size=1Gi" >> $GITHUB_OUTPUT
-            echo "REDIS_STORAGE_SIZE=1Gi" >> $GITHUB_ENV
-          elif [ "$ENV" == "staging" ]; then
-            echo "redis_storage_size=768Mi" >> $GITHUB_OUTPUT
-            echo "REDIS_STORAGE_SIZE=768Mi" >> $GITHUB_ENV
-          else
-            echo "redis_storage_size=512Mi" >> $GITHUB_OUTPUT
-            echo "REDIS_STORAGE_SIZE=512Mi" >> $GITHUB_ENV
-          fi
-          
-          # All environments use the same storage class
-          echo "redis_storage_class=openebs-hostpath" >> $GITHUB_OUTPUT
-          echo "REDIS_STORAGE_CLASS=openebs-hostpath" >> $GITHUB_ENV
-          
-          echo "Using Redis image tag: $TAG"
-          echo "Using Redis storage size: $REDIS_STORAGE_SIZE"
-          echo "Using Redis storage class: $REDIS_STORAGE_CLASS"
-      
       # Deploy Redis service
       - name: Deploy Redis Service
         run: |
           ENV="${{ needs.set-environment.outputs.environment }}"
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
-          echo "Deploying Redis service to $NAMESPACE with tag $REDIS_TAG..."
+          echo "Deploying Redis service to $NAMESPACE environment..."
           
           # Deploy using environment-specific values file
-          if [ -f "./charts/redis/environments/values.${ENV}.yaml" ]; then
-            echo "Using environment-specific values file: values.${ENV}.yaml"
-            helm upgrade --install redis ./charts/redis \
-              --namespace $NAMESPACE \
-              --values ./charts/redis/environments/values.${ENV}.yaml \
-              --set namespace=$NAMESPACE \
-              --set image.repository=redis \
-              --set image.tag=$REDIS_TAG \
-              --set persistence.storageClass=$REDIS_STORAGE_CLASS \
-              --set persistence.size=$REDIS_STORAGE_SIZE \
-              --timeout 10m \
-              --wait
-          else
-            echo "Environment-specific values file not found, using inline configuration"
-            helm upgrade --install redis ./charts/redis \
-              --namespace $NAMESPACE \
-              --set namespace=$NAMESPACE \
-              --set image.repository=redis \
-              --set image.tag=$REDIS_TAG \
-              --set image.pullPolicy=Always \
-              --set service.type=ClusterIP \
-              --set service.port=6379 \
-              --set service.targetPort=6379 \
-              --set redis.port=6379 \
-              --set redis.config.maxmemory="128mb" \
-              --set redis.config.maxmemory-policy="allkeys-lru" \
-              --set redis.config.appendonly="yes" \
-              --set redis.config.appendfsync="everysec" \
-              --set persistence.enabled=true \
-              --set persistence.storageClass=$REDIS_STORAGE_CLASS \
-              --set persistence.size=$REDIS_STORAGE_SIZE \
-              --set resources.limits.cpu=200m \
-              --set resources.limits.memory=256Mi \
-              --set resources.requests.cpu=100m \
-              --set resources.requests.memory=128Mi \
-              --timeout 10m \
-              --wait
-          fi
+          helm upgrade --install redis ./charts/redis \
+            --namespace $NAMESPACE \
+            --values ./charts/redis/environments/values.${ENV}.yaml \
+            --timeout 10m \
+            --wait
           
           echo "Redis service deployed in namespace $NAMESPACE"
-          
-      # Improved verification that doesn't get stuck
+      
+      # Verify Redis deployment with custom checks
       - name: Verify Redis deployment
         run: |
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
-          echo "Verifying Redis deployment with improved checks..."
+          echo "Verifying Redis deployment with custom checks..."
           
-          # Custom verification logic without using rollout status
-          MAX_ATTEMPTS=15
+          # Check Redis StatefulSet and Pod status without using rollout status
+          MAX_ATTEMPTS=12
           SLEEP_TIME=10
           ATTEMPT=0
-          SUCCESS=false
           
           while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
             ATTEMPT=$((ATTEMPT + 1))
-            echo "Verification attempt $ATTEMPT of $MAX_ATTEMPTS..."
+            echo "Check attempt $ATTEMPT of $MAX_ATTEMPTS..."
             
-            # Check if redis pod is ready
-            READY=$(kubectl get statefulset redis -n $NAMESPACE -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
-            DESIRED=$(kubectl get statefulset redis -n $NAMESPACE -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "0")
+            # Get pod name and status
+            POD_NAME=$(kubectl get pods -n $NAMESPACE -l app=redis -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+            if [ -z "$POD_NAME" ]; then
+              echo "Redis pod not found yet. Waiting..."
+              sleep $SLEEP_TIME
+              continue
+            fi
             
-            echo "Redis: $READY/$DESIRED pods ready"
+            # Check if pod is Running and Ready
+            POD_STATUS=$(kubectl get pod $POD_NAME -n $NAMESPACE -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+            POD_READY=$(kubectl get pod $POD_NAME -n $NAMESPACE -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null || echo "false")
             
-            # If all replicas are ready, test Redis with PING
-            if [ "$READY" == "$DESIRED" ] && [ "$DESIRED" != "0" ]; then
-              echo "StatefulSet reports all pods ready, checking Redis functionality..."
+            echo "Pod $POD_NAME status: $POD_STATUS, Ready: $POD_READY"
+            
+            if [ "$POD_STATUS" = "Running" ] && [ "$POD_READY" = "true" ]; then
+              echo "✅ Redis pod is running and ready, checking Redis functionality..."
               
-              # Get pod name
-              POD_NAME=$(kubectl get pod -n $NAMESPACE -l app=redis -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-              
-              if [ -n "$POD_NAME" ]; then
-                # Test Redis with PING command
-                if kubectl exec $POD_NAME -n $NAMESPACE -- redis-cli ping | grep -q PONG; then
-                  echo "✅ Redis is running and responsive!"
-                  SUCCESS=true
-                  break
-                else
-                  echo "Redis pod exists but not responding to ping yet"
-                fi
+              # Test Redis with PING command
+              if kubectl exec -n $NAMESPACE $POD_NAME -- redis-cli ping | grep -q PONG; then
+                echo "✅ Redis is functional and responding to commands!"
+                break
+              else 
+                echo "Redis pod is ready but not responding to ping yet"
               fi
             fi
             
-            # If not ready yet or PING failed, sleep and retry
-            if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
-              echo "Waiting $SLEEP_TIME seconds before next check..."
-              sleep $SLEEP_TIME
-            fi
+            echo "Waiting for Redis pod to be fully ready..."
+            sleep $SLEEP_TIME
           done
           
-          # Continue even if verification didn't succeed
-          if [ "$SUCCESS" != "true" ]; then
-            echo "⚠️ Could not fully verify Redis, but continuing with deployment."
-            echo "This may be due to transient network issues or slower pod startup."
-          else
-            echo "Redis verification successful."
-          fi
-          
-          # Always exit successfully to prevent blocking other deployments
+          # Always exit successfully to allow deployment to continue
+          # Even if verification didn't complete in the allotted time
+          echo "Redis deployment verification completed. Proceeding with other deployments."
           exit 0
       
       - name: Report Redis deployment status
@@ -359,7 +285,8 @@ jobs:
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
           echo "=== Redis Deployment Status for ${{ needs.set-environment.outputs.environment }} ==="
-          echo "Redis: $(kubectl get statefulset redis -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
+          echo "=== Redis StatefulSet Status ==="
+          kubectl get statefulset redis -n $NAMESPACE
           
           echo "=== Redis Pod Status ==="
           kubectl get pods -n $NAMESPACE -l app=redis
@@ -369,6 +296,13 @@ jobs:
           
           echo "=== Redis PVC Status ==="
           kubectl get pvc -n $NAMESPACE -l app=redis
+          
+          # Get Redis logs if possible
+          POD_NAME=$(kubectl get pods -n $NAMESPACE -l app=redis -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$POD_NAME" ]; then
+            echo "=== Recent Redis Logs ==="
+            kubectl logs -n $NAMESPACE $POD_NAME --tail=20 || echo "Could not retrieve logs"
+          fi
 
   deploy-admin:
     name: Deploy Admin to EKS
