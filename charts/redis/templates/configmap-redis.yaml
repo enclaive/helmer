@@ -14,7 +14,7 @@ data:
     protected-mode yes
     # Memory management
     maxmemory {{ .Values.redis.config.maxmemory }}
-    maxmemory-policy {{ .Values.redis.config.maxmemory-policy }}
+    maxmemory-policy {{ .Values.redis.config.maxmemoryPolicy }}
 
     # Persistence
     {{- if eq .Values.redis.config.appendonly "yes" }}
