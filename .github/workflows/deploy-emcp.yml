@@ -7,6 +7,7 @@ on:
       - 'charts/admin/**'
       - 'charts/backend/**'
       - 'charts/frontend/**'
+      - 'charts/redis/**'
       - '.github/workflows/deploy-emcp.yml'
       - '.github/workflows/k8s/**'
   workflow_dispatch:
@@ -32,6 +33,11 @@ on:
         type: boolean
       deploy_frontend:
         description: 'Deploy frontend service'
+        required: false
+        default: true
+        type: boolean
+      deploy_redis:
+        description: 'Deploy redis service'
         required: false
         default: true
         type: boolean
@@ -84,6 +90,7 @@ jobs:
       admin_changed: ${{ steps.check-folders.outputs.admin_changed }}
       backend_changed: ${{ steps.check-folders.outputs.backend_changed }}
       frontend_changed: ${{ steps.check-folders.outputs.frontend_changed }}
+      redis_changed: ${{ steps.check-folders.outputs.redis_changed }}
       workflow_changed: ${{ steps.check-folders.outputs.workflow_changed }}
     
     steps:
@@ -100,6 +107,7 @@ jobs:
             echo "admin_changed=${{ github.event.inputs.deploy_admin }}" >> $GITHUB_OUTPUT
             echo "backend_changed=${{ github.event.inputs.deploy_backend }}" >> $GITHUB_OUTPUT
             echo "frontend_changed=${{ github.event.inputs.deploy_frontend }}" >> $GITHUB_OUTPUT
+            echo "redis_changed=${{ github.event.inputs.deploy_redis }}" >> $GITHUB_OUTPUT
             echo "workflow_changed=true" >> $GITHUB_OUTPUT
             exit 0
           fi
@@ -115,6 +123,7 @@ jobs:
           ADMIN_CHANGED="false"
           BACKEND_CHANGED="false"
           FRONTEND_CHANGED="false"
+          REDIS_CHANGED="false"
           WORKFLOW_CHANGED="false"
           
           # Check if specific folders were modified
@@ -139,6 +148,13 @@ jobs:
             echo "No changes in frontend service"
           fi
           
+          if echo "$CHANGED_FILES" | grep -q "^charts/redis/"; then
+            echo "Redis service files changed"
+            REDIS_CHANGED="true"
+          else
+            echo "No changes in redis service"
+          fi
+          
           # Check if workflow files changed
           if echo "$CHANGED_FILES" | grep -q "^.github/workflows/"; then
             echo "Workflow files changed"
@@ -151,18 +167,182 @@ jobs:
           echo "admin_changed=${ADMIN_CHANGED}" >> $GITHUB_OUTPUT
           echo "backend_changed=${BACKEND_CHANGED}" >> $GITHUB_OUTPUT
           echo "frontend_changed=${FRONTEND_CHANGED}" >> $GITHUB_OUTPUT
+          echo "redis_changed=${REDIS_CHANGED}" >> $GITHUB_OUTPUT
           echo "workflow_changed=${WORKFLOW_CHANGED}" >> $GITHUB_OUTPUT
           
           # Debug outputs
           echo "admin_changed: ${ADMIN_CHANGED}"
           echo "backend_changed: ${BACKEND_CHANGED}"
           echo "frontend_changed: ${FRONTEND_CHANGED}"
+          echo "redis_changed: ${REDIS_CHANGED}"
           echo "workflow_changed: ${WORKFLOW_CHANGED}"
+
+  deploy-redis:
+    name: Deploy Redis to EKS
+    needs: [set-environment, check-changes]
+    if: needs.check-changes.outputs.redis_changed == 'true' || needs.check-changes.outputs.workflow_changed == 'true'
+    runs-on: ubuntu-latest
+    environment: ${{ needs.set-environment.outputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
+          
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'v3.12.0'
+          
+      # Create namespace first (if it doesn't exist)
+      - name: Create namespace
+        run: |
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          echo "Creating namespace $NAMESPACE if it doesn't exist..."
+          kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+      
+      # Set Redis configuration based on environment
+      - name: Set Redis configuration
+        id: redis-config
+        run: |
+          ENV="${{ needs.set-environment.outputs.environment }}"
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          
+          # Use consistent tag for Redis across environments
+          TAG="6.2-alpine"
+          echo "redis_tag=$TAG" >> $GITHUB_OUTPUT
+          echo "REDIS_TAG=$TAG" >> $GITHUB_ENV
+          
+          # Set storage size based on environment
+          if [ "$ENV" == "prod" ]; then
+            echo "redis_storage_size=1Gi" >> $GITHUB_OUTPUT
+            echo "REDIS_STORAGE_SIZE=1Gi" >> $GITHUB_ENV
+          elif [ "$ENV" == "staging" ]; then
+            echo "redis_storage_size=768Mi" >> $GITHUB_OUTPUT
+            echo "REDIS_STORAGE_SIZE=768Mi" >> $GITHUB_ENV
+          else
+            echo "redis_storage_size=512Mi" >> $GITHUB_OUTPUT
+            echo "REDIS_STORAGE_SIZE=512Mi" >> $GITHUB_ENV
+          fi
+          
+          # All environments use the same storage class
+          echo "redis_storage_class=openebs-hostpath" >> $GITHUB_OUTPUT
+          echo "REDIS_STORAGE_CLASS=openebs-hostpath" >> $GITHUB_ENV
+          
+          echo "Using Redis image tag: $TAG"
+          echo "Using Redis storage size: $REDIS_STORAGE_SIZE"
+          echo "Using Redis storage class: $REDIS_STORAGE_CLASS"
+      
+      # Deploy Redis service
+      - name: Deploy Redis Service
+        run: |
+          ENV="${{ needs.set-environment.outputs.environment }}"
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          
+          echo "Deploying Redis service to $NAMESPACE with tag $REDIS_TAG..."
+          
+          # Create a temporary values file for this deployment
+          cat > /tmp/redis-values.yaml << EOF
+namespace: $NAMESPACE
+replicaCount: 1
+
+image:
+  repository: redis
+  tag: "${REDIS_TAG}"
+  pullPolicy: Always
+
+service:
+  type: ClusterIP
+  port: 6379
+  targetPort: 6379
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+redis:
+  port: 6379
+  config:
+    maxmemory: "128mb"
+    maxmemory-policy: "allkeys-lru"
+    appendonly: "yes"
+    appendfsync: "everysec"
+  password: ""
+
+persistence:
+  enabled: true
+  storageClass: "${REDIS_STORAGE_CLASS}"
+  size: "${REDIS_STORAGE_SIZE}"
+
+probes:
+  liveness:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+EOF
+
+          # Show the values file for debugging
+          echo "Using the following Redis values:"
+          cat /tmp/redis-values.yaml
+          
+          # Deploy using Helm
+          helm upgrade --install redis ./charts/redis \
+            --namespace $NAMESPACE \
+            --values /tmp/redis-values.yaml \
+            --timeout 10m \
+            --wait
+          
+          echo "Redis service deployed in namespace $NAMESPACE"
+          
+      # Verify deployment status
+      - name: Verify Redis deployment
+        run: |
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          
+          echo "Verifying Redis deployment..."
+          kubectl rollout status statefulset/redis -n $NAMESPACE --timeout=300s || true
+          
+      - name: Report Redis deployment status
+        if: always()
+        run: |
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          
+          echo "=== Redis Deployment Status for ${{ needs.set-environment.outputs.environment }} ==="
+          echo "Redis: $(kubectl get statefulset redis -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
+          
+          echo "=== Redis Pod Status ==="
+          kubectl get pods -n $NAMESPACE -l app=redis
+          
+          echo "=== Redis Service Status ==="
+          kubectl get service redis -n $NAMESPACE
 
   deploy-admin:
     name: Deploy Admin to EKS
-    needs: [set-environment, check-changes]
-    if: needs.check-changes.outputs.admin_changed == 'true' || needs.check-changes.outputs.workflow_changed == 'true'
+    needs: [set-environment, check-changes, deploy-redis]
+    if: |
+      always() && 
+      (needs.check-changes.outputs.admin_changed == 'true' || 
+       needs.check-changes.outputs.workflow_changed == 'true')
     runs-on: ubuntu-latest
     environment: ${{ needs.set-environment.outputs.environment }}
     
@@ -234,22 +414,6 @@ jobs:
           echo "ADMIN_IMAGE=$ECR_IMAGE" >> $GITHUB_ENV
           
           echo "Using image: $ECR_IMAGE"
-      
-      # Clean up any existing failed resources
-      - name: Clean up resources if needed
-        run: |
-          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
-          
-          # Check if there are any pods with ImagePull issues
-          kubectl get pods -n $NAMESPACE -l app=admin 2>/dev/null || echo "No admin pods found."
-          PODS_WITH_ISSUES=$(kubectl get pods -n $NAMESPACE -l app=admin 2>/dev/null | grep -E "ImagePull|ErrImage" || echo "")
-          
-          if [[ -n "$PODS_WITH_ISSUES" ]]; then
-            echo "Found pods with image pull issues. Cleaning up..."
-            kubectl delete pods -n $NAMESPACE -l app=admin --grace-period=0 --force || true
-            kubectl delete statefulset admin -n $NAMESPACE || true
-            sleep 5
-          fi
       
       # Deploy Admin service directly in the workflow instead of using scripts
       - name: Deploy Admin Service
@@ -323,7 +487,7 @@ jobs:
 
   deploy-backend:
     name: Deploy Backend to EKS
-    needs: [set-environment, check-changes, deploy-admin]
+    needs: [set-environment, check-changes, deploy-redis, deploy-admin]
     if: |
       always() && 
       (needs.check-changes.outputs.backend_changed == 'true' || 
@@ -392,22 +556,6 @@ jobs:
           echo "BACKEND_IMAGE=$ECR_IMAGE" >> $GITHUB_ENV
           
           echo "Using image: $ECR_IMAGE"
-      
-      # Clean up any existing failed resources
-      - name: Clean up resources if needed
-        run: |
-          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
-          
-          # Check if there are any pods with ImagePull issues
-          kubectl get pods -n $NAMESPACE -l app=backend 2>/dev/null || echo "No backend pods found."
-          PODS_WITH_ISSUES=$(kubectl get pods -n $NAMESPACE -l app=backend 2>/dev/null | grep -E "ImagePull|ErrImage" || echo "")
-          
-          if [[ -n "$PODS_WITH_ISSUES" ]]; then
-            echo "Found pods with image pull issues. Cleaning up..."
-            kubectl delete pods -n $NAMESPACE -l app=backend --grace-period=0 --force || true
-            kubectl delete statefulset backend -n $NAMESPACE || true
-            sleep 5
-          fi
       
       # Deploy Backend service
       - name: Deploy Backend Service
@@ -568,21 +716,6 @@ jobs:
           kubectl delete secret frontend-ingress-tls -n $NAMESPACE --ignore-not-found
           kubectl delete secret frontend-prianto-ingress-tls -n $NAMESPACE --ignore-not-found
           kubectl delete secret frontend-govtech-ingress-tls -n $NAMESPACE --ignore-not-found
-          
-          # Check if there are any frontend resources at all
-          if kubectl get deployment frontend -n $NAMESPACE &>/dev/null; then
-            echo "Found existing frontend deployment, checking for issues..."
-            
-            # Check for pods with issues
-            PODS_WITH_ISSUES=$(kubectl get pods -n $NAMESPACE -l app=frontend 2>/dev/null | grep -E "ImagePull|ErrImage" || echo "")
-            
-            if [[ -n "$PODS_WITH_ISSUES" ]]; then
-              echo "Found pods with image pull issues. Cleaning up..."
-              kubectl delete pods -n $NAMESPACE -l app=frontend --grace-period=0 --force || true
-            fi
-          else
-            echo "No existing frontend deployment found. Will create a new one."
-          fi
           
           # Clean up any existing frontend StatefulSet (from previous versions)
           if kubectl get statefulset frontend -n $NAMESPACE &>/dev/null; then

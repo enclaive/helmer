@@ -19,6 +19,32 @@ kubectl create secret docker-registry aws-ecr-creds \
   --namespace=${NAMESPACE} \
   --dry-run=client -o yaml | kubectl apply -f -
 
+# Deploy Redis service
+echo "Deploying Redis service..."
+helm upgrade --install redis ./charts/redis \
+  --namespace "$NAMESPACE" \
+  --create-namespace \
+  --values ./charts/redis/environments/values.dev.yaml \
+  --set image.repository="redis" \
+  --set image.tag="6.2-alpine" \
+  --set image.pullPolicy=Always \
+  --set service.type=ClusterIP \
+  --set service.port=6379 \
+  --set service.targetPort=6379 \
+  --set redis.port=6379 \
+  --set redis.config.maxmemory="128mb" \
+  --set redis.config.maxmemory-policy="allkeys-lru" \
+  --set redis.config.appendonly="yes" \
+  --set redis.config.appendfsync="everysec" \
+  --set persistence.enabled=true \
+  --set persistence.storageClass="openebs-hostpath" \
+  --set persistence.size="512Mi" \
+  --timeout 10m \
+  --wait
+
+# Check deployment status
+check_status "statefulset" "redis" "$NAMESPACE"
+
 # Deploy Admin service
 echo "Deploying Admin service..."
 helm upgrade --install admin ./charts/admin \
@@ -52,6 +78,13 @@ helm upgrade --install backend ./charts/backend \
   --set logging.level=debug \
   --set logging.format=pretty \
   --set features.enableBackups=false \
+  --set mongodb.host=mongodb \
+  --set mongodb.port=27017 \
+  --set mongodb.database=backend_db \
+  --set mongodb.username=root \
+  --set mongodb.password=root \
+  --set redis.host=redis \
+  --set redis.port=6379 \
   --timeout 10m \
   --wait
 
