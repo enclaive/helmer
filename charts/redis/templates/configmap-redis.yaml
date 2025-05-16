@@ -36,4 +36,3 @@ data:
 
     # Logging
     loglevel notice
-    logfile ""
