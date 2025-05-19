@@ -1,0 +1,14 @@
+namespace: emcp-prod
+replicaCount: 1
+
+image:
+  tag: "5.0.2"
+
+persistence:
+  size: 2Gi  # Slightly larger for production
+
+# More frequent backups for production
+backup:
+  enabled: true
+  schedule: "0 2 * * 0,3"  # Twice a week
+  retentionDays: 7
