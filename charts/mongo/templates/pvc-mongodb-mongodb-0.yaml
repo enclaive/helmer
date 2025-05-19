@@ -1,24 +1,23 @@
+{{- if .Values.persistence.enabled }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  annotations:
-    pv.kubernetes.io/bind-completed: "yes"
-    pv.kubernetes.io/bound-by-controller: "yes"
-    volume.beta.kubernetes.io/storage-provisioner: driver.longhorn.io
-    volume.kubernetes.io/storage-provisioner: driver.longhorn.io
-  finalizers:
-    - kubernetes.io/pvc-protection
+  name: data-mongodb
+  namespace: {{ .Release.Namespace }}
   labels:
     app: mongodb
-    recurring-job-group.longhorn.io/default: enabled
-  name: mongodb-mongodb-0
-  namespace: {{ .Release.Namespace }}
+    {{- include "mongodb.labels" . | nindent 4 }}
 spec:
   accessModes:
-    - ReadWriteOnce
+    - {{ .Values.persistence.accessMode }}
+  {{- if .Values.persistence.storageClass }}
+  {{- if (eq "-" .Values.persistence.storageClass) }}
+  storageClassName: ""
+  {{- else }}
+  storageClassName: {{ .Values.persistence.storageClass }}
+  {{- end }}
+  {{- end }}
   resources:
     requests:
-      storage: 5Gi
-  storageClassName: longhorn
-  volumeMode: Filesystem
-  volumeName: pvc-33e77280-9649-4b45-84e9-28e10efeefe8
+      storage: {{ .Values.persistence.size }}
+{{- end }}

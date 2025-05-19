@@ -20,6 +20,7 @@ on:
       - 'charts/redis/Chart.yaml'
       - 'charts/redis/values.yaml'
       - 'charts/redis/environments/*.yaml'
+      - 'charts/mongo/**'
       - '.github/workflows/**'
   workflow_dispatch:
     inputs:
@@ -49,6 +50,11 @@ on:
         type: boolean
       deploy_redis:
         description: 'Deploy redis service'
+        required: false
+        default: true
+        type: boolean
+      deploy_mongodb:
+        description: 'Deploy mongodb service'
         required: false
         default: true
         type: boolean
@@ -102,6 +108,7 @@ jobs:
       backend_changed: ${{ steps.check-folders.outputs.backend_changed }}
       frontend_changed: ${{ steps.check-folders.outputs.frontend_changed }}
       redis_changed: ${{ steps.check-folders.outputs.redis_changed }}
+      mongodb_changed: ${{ steps.check-folders.outputs.mongodb_changed }}
       workflow_changed: ${{ steps.check-folders.outputs.workflow_changed }}
     
     steps:
@@ -121,20 +128,118 @@ jobs:
               echo "backend_changed=false" >> $GITHUB_OUTPUT
               echo "frontend_changed=false" >> $GITHUB_OUTPUT
               echo "redis_changed=false" >> $GITHUB_OUTPUT
+              echo "mongodb_changed=false" >> $GITHUB_OUTPUT
               echo "workflow_changed=true" >> $GITHUB_OUTPUT
             else
               echo "admin_changed=${{ github.event.inputs.deploy_admin }}" >> $GITHUB_OUTPUT
               echo "backend_changed=${{ github.event.inputs.deploy_backend }}" >> $GITHUB_OUTPUT
               echo "frontend_changed=${{ github.event.inputs.deploy_frontend }}" >> $GITHUB_OUTPUT
               echo "redis_changed=${{ github.event.inputs.deploy_redis }}" >> $GITHUB_OUTPUT
+              echo "mongodb_changed=${{ github.event.inputs.deploy_mongodb }}" >> $GITHUB_OUTPUT
               echo "workflow_changed=true" >> $GITHUB_OUTPUT
             fi
             exit 0
           fi
           
           # For push events, check which files changed with precise logic
-          # [This code remains the same as in the optimized workflow]
-          # ...
+          echo "Checking changes in the last commit..."
+          
+          # Get changed files
+          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD || git diff --name-only $(git rev-parse --short HEAD^) $(git rev-parse --short HEAD))
+          echo "Changed files: $CHANGED_FILES"
+          
+          # Default all to false
+          ADMIN_CHANGED="false"
+          BACKEND_CHANGED="false"
+          FRONTEND_CHANGED="false"
+          REDIS_CHANGED="false"
+          MONGODB_CHANGED="false"
+          WORKFLOW_CHANGED="false"
+          
+          # Check if specific folders were modified with precise targeting
+          if echo "$CHANGED_FILES" | grep -q "^charts/admin/"; then
+            # Look for relevant changes in admin
+            if echo "$CHANGED_FILES" | grep -E -q "^charts/admin/(templates|values\.yaml|Chart\.yaml|environments/values\.[^/]+\.yaml)"; then
+              echo "Admin service files changed"
+              ADMIN_CHANGED="true"
+            else
+              echo "Changes in admin directory don't affect deployment"
+            fi
+          else
+            echo "No changes in admin service"
+          fi
+          
+          if echo "$CHANGED_FILES" | grep -q "^charts/backend/"; then
+            # Look for relevant changes in backend
+            if echo "$CHANGED_FILES" | grep -E -q "^charts/backend/(templates|values\.yaml|Chart\.yaml|environments/values\.[^/]+\.yaml)"; then
+              echo "Backend service files changed"
+              BACKEND_CHANGED="true"
+            else
+              echo "Changes in backend directory don't affect deployment"
+            fi
+          else
+            echo "No changes in backend service"
+          fi
+          
+          if echo "$CHANGED_FILES" | grep -q "^charts/frontend/"; then
+            # Look for relevant changes in frontend
+            if echo "$CHANGED_FILES" | grep -E -q "^charts/frontend/(templates|values\.yaml|Chart\.yaml|environments/values\.[^/]+\.yaml)"; then
+              echo "Frontend service files changed"
+              FRONTEND_CHANGED="true"
+            else
+              echo "Changes in frontend directory don't affect deployment"
+            fi
+          else
+            echo "No changes in frontend service"
+          fi
+          
+          if echo "$CHANGED_FILES" | grep -q "^charts/redis/"; then
+            # Look for relevant changes in redis
+            if echo "$CHANGED_FILES" | grep -E -q "^charts/redis/(templates|values\.yaml|Chart\.yaml|environments/values\.[^/]+\.yaml)"; then
+              echo "Redis service files changed"
+              REDIS_CHANGED="true"
+            else
+              echo "Changes in redis directory don't affect deployment"
+            fi
+          else
+            echo "No changes in redis service"
+          fi
+          
+          if echo "$CHANGED_FILES" | grep -q "^charts/mongo/"; then
+            # Look for relevant changes in mongodb
+            if echo "$CHANGED_FILES" | grep -E -q "^charts/mongo/(templates|values\.yaml|Chart\.yaml|environments/values\.[^/]+\.yaml)"; then
+              echo "MongoDB service files changed"
+              MONGODB_CHANGED="true"
+            else
+              echo "Changes in mongodb directory don't affect deployment"
+            fi
+          else
+            echo "No changes in mongodb service"
+          fi
+          
+          # Check if workflow files changed - be more selective
+          if echo "$CHANGED_FILES" | grep -E -q "^\.github/workflows/(deploy-emcp\.yml|deploy-mongodb\.yml|k8s/(common|dev|staging|prod)\.sh)"; then
+            echo "Deployment workflow files changed"
+            WORKFLOW_CHANGED="true"
+          else
+            echo "No changes in workflow files"
+          fi
+          
+          # Set outputs explicitly
+          echo "admin_changed=${ADMIN_CHANGED}" >> $GITHUB_OUTPUT
+          echo "backend_changed=${BACKEND_CHANGED}" >> $GITHUB_OUTPUT
+          echo "frontend_changed=${FRONTEND_CHANGED}" >> $GITHUB_OUTPUT
+          echo "redis_changed=${REDIS_CHANGED}" >> $GITHUB_OUTPUT
+          echo "mongodb_changed=${MONGODB_CHANGED}" >> $GITHUB_OUTPUT
+          echo "workflow_changed=${WORKFLOW_CHANGED}" >> $GITHUB_OUTPUT
+          
+          # Debug outputs
+          echo "admin_changed: ${ADMIN_CHANGED}"
+          echo "backend_changed: ${BACKEND_CHANGED}"
+          echo "frontend_changed: ${FRONTEND_CHANGED}"
+          echo "redis_changed: ${REDIS_CHANGED}"
+          echo "mongodb_changed: ${MONGODB_CHANGED}"
+          echo "workflow_changed: ${WORKFLOW_CHANGED}"
 
   deploy-redis:
     name: Deploy Redis to EKS
@@ -149,6 +254,25 @@ jobs:
       environment: ${{ needs.set-environment.outputs.environment }}
       namespace: ${{ needs.set-environment.outputs.namespace }}
       skip_deployment: ${{ github.event.inputs.deploy_redis == 'false' && github.event.inputs.check_redis_only != 'true' }}
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+  deploy-mongodb:
+    name: Deploy MongoDB to EKS
+    needs: [set-environment, check-changes, deploy-redis]
+    if: |
+      always() && 
+      needs.deploy-redis.result != 'skipped' &&
+      (needs.check-changes.outputs.mongodb_changed == 'true' || 
+       (needs.check-changes.outputs.workflow_changed == 'true' && 
+        (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_mongodb == 'true'))) &&
+      (github.event_name != 'workflow_dispatch' || github.event.inputs.check_redis_only != 'true')
+    uses: ./.github/workflows/deploy-mongodb.yml
+    with:
+      environment: ${{ needs.set-environment.outputs.environment }}
+      namespace: ${{ needs.set-environment.outputs.namespace }}
+      skip_deployment: ${{ github.event.inputs.deploy_mongodb == 'false' }}
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -174,10 +298,11 @@ jobs:
 
   deploy-backend:
     name: Deploy Backend to EKS
-    needs: [set-environment, check-changes, deploy-redis, deploy-admin]
+    needs: [set-environment, check-changes, deploy-redis, deploy-mongodb, deploy-admin]
     if: |
       always() && 
       needs.deploy-redis.result != 'skipped' &&
+      needs.deploy-mongodb.result != 'skipped' &&
       (needs.check-changes.outputs.backend_changed == 'true' || 
        (needs.check-changes.outputs.workflow_changed == 'true' && 
         (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_backend == 'true'))) &&
@@ -193,10 +318,11 @@ jobs:
 
   deploy-frontend:
     name: Deploy Frontend to EKS
-    needs: [set-environment, check-changes, deploy-redis, deploy-backend]
+    needs: [set-environment, check-changes, deploy-redis, deploy-mongodb, deploy-backend]
     if: |
       always() && 
       needs.deploy-redis.result != 'skipped' &&
+      needs.deploy-backend.result != 'skipped' &&
       (needs.check-changes.outputs.frontend_changed == 'true' || 
        (needs.check-changes.outputs.workflow_changed == 'true' && 
         (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_frontend == 'true'))) &&
@@ -212,7 +338,7 @@ jobs:
 
   deployment-summary:
     name: Deployment Summary
-    needs: [set-environment, deploy-redis, deploy-admin, deploy-backend, deploy-frontend]
+    needs: [set-environment, deploy-redis, deploy-mongodb, deploy-admin, deploy-backend, deploy-frontend]
     if: always()
     runs-on: ubuntu-latest
     env:
@@ -240,6 +366,7 @@ jobs:
           echo ""
           
           echo "Redis: ${{ needs.deploy-redis.result }}"
+          echo "MongoDB: ${{ needs.deploy-mongodb.result }}"
           echo "Admin: ${{ needs.deploy-admin.result }}"
           echo "Backend: ${{ needs.deploy-backend.result }}"
           echo "Frontend: ${{ needs.deploy-frontend.result }}"
@@ -247,6 +374,7 @@ jobs:
           
           echo "=== SERVICE STATUS ==="
           echo "REDIS: $(kubectl get statefulset redis -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not deployed')"
+          echo "MONGODB: $(kubectl get statefulset mongodb -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not deployed')"
           echo "ADMIN: $(kubectl get statefulset admin -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not deployed')"
           echo "BACKEND: $(kubectl get statefulset backend -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not deployed')"
           echo "FRONTEND: $(kubectl get deployment frontend -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not deployed')"

@@ -1,6 +1,7 @@
 # Default values for mongodb
-namespace: default
+# This is a YAML-formatted file.
 
+namespace: default
 replicaCount: 1
 
 image:
@@ -9,7 +10,7 @@ image:
   pullPolicy: IfNotPresent
 
 imagePullSecrets:
-  - name: harbor-creds
+  - name: aws-ecr-creds
 
 nameOverride: ""
 fullnameOverride: ""
@@ -18,6 +19,12 @@ service:
   type: ClusterIP
   port: 27017
   targetPort: 27017
+
+# MongoDB configuration
+mongodb:
+  config:
+    cacheSizeGB: 0.25
+  port: 27017
 
 # MongoDB credentials
 auth:
@@ -38,25 +45,40 @@ resources:
     cpu: 100m
     memory: 256Mi
 
+podAnnotations: {}
+podSecurityContext: {}
+securityContext: {}
 nodeSelector: {}
-
 tolerations: []
-
 affinity: {}
 
 persistence:
   enabled: true
-  storageClass: "longhorn"
-  size: 1Gi
+  storageClass: "openebs-hostpath"
+  size: "1Gi"
+  accessMode: "ReadWriteOnce"
 
 # Backup configuration - minimal approach
 backup:
   enabled: true
   # Schedule in cron format
-  schedule: "0 2 * * 0"  # Only once per week on Sunday at 2am
+  schedule: "0 2 * * 0"  # Once per week on Sunday at 2am
   # Number of days to keep backups
   retentionDays: 7
   # Database to backup
   database: backend_db
   # Cleanup cron schedule
   cleanupSchedule: "0 3 * * 0"  # Every Sunday at 3am
+
+# Health check probes
+probes:
+  liveness:
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+  readiness:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3

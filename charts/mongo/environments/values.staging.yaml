@@ -2,13 +2,52 @@ namespace: emcp-staging
 replicaCount: 1
 
 image:
+  repository: mongo
   tag: "5.0.2"
+  pullPolicy: IfNotPresent
 
+# Balanced resources for staging
+resources:
+  limits:
+    cpu: 300m
+    memory: 768Mi
+  requests:
+    cpu: 150m
+    memory: 384Mi
+
+# Use OpenEBS for storage like Redis
 persistence:
-  size: 1Gi
+  enabled: true
+  storageClass: "openebs-hostpath"
+  size: "1Gi"
+  accessMode: "ReadWriteOnce"
+
+# MongoDB configuration
+mongodb:
+  config:
+    cacheSizeGB: 0.5
+  port: 27017
 
 # Less frequent backups in staging
 backup:
   enabled: true
-  schedule: "0 2 * * 0"  # Once per week
+  schedule: "0 2 * * 0"  # Once per week on Sunday at 2am
   retentionDays: 3
+
+# Auth credentials
+auth:
+  rootUsername: root
+  rootPassword: root
+
+# Health check probes
+probes:
+  liveness:
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+  readiness:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3

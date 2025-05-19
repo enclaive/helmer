@@ -1,0 +1,65 @@
+name: Deploy MongoDB Service
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      namespace:
+        required: true
+        type: string
+      skip_deployment:
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+
+jobs:
+  deploy-mongodb:
+    name: Deploy MongoDB
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.skip_deployment }}
+    env:
+      AWS_REGION: eu-central-1
+      EKS_CLUSTER_NAME: emcp-eks-cluster
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup EKS
+        uses: ./.github/actions/setup-eks
+        with:
+          aws-access-key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          eks-cluster: ${{ env.EKS_CLUSTER_NAME }}
+          namespace: ${{ inputs.namespace }}
+      
+      - name: Deploy MongoDB
+        uses: ./.github/actions/deploy-helm-chart
+        with:
+          service-name: mongodb
+          chart-path: ./charts/mongo
+          values-file: ./charts/mongo/environments/values.${{ inputs.environment }}.yaml
+          namespace: ${{ inputs.namespace }}
+          environment: ${{ inputs.environment }}
+          image-repository: mongo
+          image-tag: 5.0.2
+          timeout: 10m
+      
+      - name: Report MongoDB deployment status
+        if: always()
+        run: |
+          NAMESPACE="${{ inputs.namespace }}"
+          
+          echo "=== MongoDB Deployment Status for ${{ inputs.environment }} ==="
+          kubectl get statefulset mongodb -n $NAMESPACE
+          kubectl get pods -n $NAMESPACE -l app=mongodb
+          kubectl get service mongodb -n $NAMESPACE
+          kubectl get pvc -n $NAMESPACE -l app=mongodb

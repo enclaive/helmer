@@ -2,13 +2,52 @@ namespace: emcp-prod
 replicaCount: 1
 
 image:
+  repository: mongo
   tag: "5.0.2"
+  pullPolicy: IfNotPresent
 
+# Higher resources for production
+resources:
+  limits:
+    cpu: 500m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 512Mi
+
+# Use OpenEBS for storage like Redis
 persistence:
-  size: 2Gi  # Slightly larger for production
+  enabled: true
+  storageClass: "openebs-hostpath"
+  size: "2Gi"
+  accessMode: "ReadWriteOnce"
+
+# MongoDB configuration
+mongodb:
+  config:
+    cacheSizeGB: 0.75
+  port: 27017
 
 # More frequent backups for production
 backup:
   enabled: true
-  schedule: "0 2 * * 0,3"  # Twice a week
+  schedule: "0 2 * * 0,3"  # Twice a week (Sunday and Wednesday) at 2am
   retentionDays: 7
+
+# Auth credentials
+auth:
+  rootUsername: root
+  rootPassword: root
+
+# Health check probes
+probes:
+  liveness:
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+  readiness:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
