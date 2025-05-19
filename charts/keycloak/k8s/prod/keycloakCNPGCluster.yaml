@@ -1,0 +1,46 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: keycloak-cnpg-cluster
+  namespace: emcp-prod
+spec:
+  description: "CloudNativePG for Keycloak"
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.2
+  instances: 1
+  startDelay: 300
+  stopDelay: 300
+  postgresql:
+    parameters:
+      shared_buffers: 256MB
+  primaryUpdateStrategy: unsupervised
+  storage:
+    storageClass: longhorn
+    size: 8Gi
+  enableSuperuserAccess: true
+  superuserSecret:
+    name: keycloak-cnpg-superuser-secret
+  bootstrap:
+    initdb:
+      database: bitnami_keycloak
+      owner: bn_keycloak
+      secret:
+        name: keycloak-cnpg-user-secret
+  backup:
+    barmanObjectStore:
+      destinationPath: s3://production-keycloak-cnpg-backup-fra/production-keycloak-cnpg-backup/
+      s3Credentials:
+        accessKeyId:
+          name: keycloak-cnpg-backup-secrets
+          key: AWS_S3_ACCESS_KEY_ID
+        secretAccessKey:
+          name: keycloak-cnpg-backup-secrets
+          key: AWS_S3_ACCESS_SECRET_KEY
+      wal:
+        compression: gzip
+        encryption: "aws:kms"
+      data:
+        compression: gzip
+        encryption: "aws:kms"
+        immediateCheckpoint: false
+        jobs: 2
+    retentionPolicy: "30d"
