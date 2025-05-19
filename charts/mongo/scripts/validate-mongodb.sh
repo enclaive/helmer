@@ -85,16 +85,9 @@ else
   exit 1
 fi
 
-# Check 6: Check for backup PVC if backups are enabled
-echo -e "\n${GREEN}6. Checking for backup PVC...${NC}"
-if grep -q "name: mongodb-backup-pvc" /tmp/mongodb-rendered.yaml; then
-  echo -e "${GREEN}✅ Backup PVC found.${NC}"
-else
-  echo -e "${YELLOW}⚠️ Backup PVC not found. Make sure backups are properly configured.${NC}"
-fi
 
 # Check 7: Check security settings
-echo -e "\n${GREEN}7. Checking security settings...${NC}"
+echo -e "\n${GREEN}6. Checking security settings...${NC}"
 if grep -q "valueFrom:" /tmp/mongodb-rendered.yaml && grep -q "secretKeyRef:" /tmp/mongodb-rendered.yaml; then
   echo -e "${GREEN}✅ Secrets references found in pod specs.${NC}"
 else
@@ -103,7 +96,7 @@ else
 fi
 
 # Check 8: Check for resource requests and limits
-echo -e "\n${GREEN}8. Checking resource allocation...${NC}"
+echo -e "\n${GREEN}7. Checking resource allocation...${NC}"
 if grep -q "resources:" /tmp/mongodb-rendered.yaml; then
   echo -e "${GREEN}✅ Resource allocation found.${NC}"
 else
@@ -111,7 +104,7 @@ else
 fi
 
 # Check 9: Dry-run server-side validation
-echo -e "\n${GREEN}9. Running server-side validation...${NC}"
+echo -e "\n${GREEN}8. Running server-side validation...${NC}"
 kubectl create --dry-run=server -f /tmp/mongodb-rendered.yaml > /dev/null || {
   echo -e "${RED}❌ Server-side validation failed. Resources may not be valid for your cluster.${NC}"
   exit 1
