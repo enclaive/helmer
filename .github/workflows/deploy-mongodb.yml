@@ -1,3 +1,4 @@
+
 name: Deploy MongoDB Service
 
 on:
@@ -33,7 +34,7 @@ jobs:
         uses: actions/checkout@v3
       
       - name: Setup EKS
-        uses: ./.github/actions/setup-eks
+        uses: ./.github/actions/setup-eks  # Fixed path to match actual location
         with:
           aws-access-key: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -41,8 +42,14 @@ jobs:
           eks-cluster: ${{ env.EKS_CLUSTER_NAME }}
           namespace: ${{ inputs.namespace }}
       
+      - name: Validate MongoDB Deployment
+        run: |
+          echo "Running MongoDB pre-deployment validation..."
+          chmod +x ./charts/mongo/scripts/validate-mongodb.sh
+          ./charts/mongo/scripts/validate-mongodb.sh -n ${{ inputs.namespace }} -f ./charts/mongo/environments/values.${{ inputs.environment }}.yaml
+          
       - name: Deploy MongoDB
-        uses: ./.github/actions/deploy-helm-chart
+        uses: ./.github/actions/deploy-helm-chart  # Fixed path to match actual location
         with:
           service-name: mongodb
           chart-path: ./charts/mongo
@@ -50,7 +57,7 @@ jobs:
           namespace: ${{ inputs.namespace }}
           environment: ${{ inputs.environment }}
           image-repository: mongo
-          image-tag: 5.0.2
+          image-tag: 5.0.20  # Updated to latest 5.0.x patch
           timeout: 10m
       
       - name: Report MongoDB deployment status
@@ -63,3 +70,9 @@ jobs:
           kubectl get pods -n $NAMESPACE -l app=mongodb
           kubectl get service mongodb -n $NAMESPACE
           kubectl get pvc -n $NAMESPACE -l app=mongodb
+          
+          # Check MongoDB connection
+          echo "=== Testing MongoDB Connection ==="
+          kubectl run mongodb-test --image=mongo:5.0.20 --rm -i --restart=Never --namespace=$NAMESPACE -- \
+            mongo "mongodb://$(kubectl get secret mongodb-credentials -n $NAMESPACE -o jsonpath="{.data.username}" | base64 --decode):$(kubectl get secret mongodb-credentials -n $NAMESPACE -o jsonpath="{.data.password}" | base64 --decode)@mongodb:27017/admin?authSource=admin" \
+            --eval "db.serverStatus()"

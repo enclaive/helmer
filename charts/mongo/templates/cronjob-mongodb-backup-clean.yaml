@@ -1,45 +1,66 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  annotations:
-    kubectl.kubernetes.io/last-applied-configuration: |
-      {"apiVersion":"batch/v1","kind":"CronJob","metadata":{"annotations":{},"name":"mongodb-backup-clean","namespace":"emcp-prod"},"spec":{"jobTemplate":{"spec":{"template":{"spec":{"containers":[{"command":["/bin/sh","-c","find /data/db/dump-* -mtime +7 -exec rm -rf {} \\;"],"image":"mongo:5.0.2","name":"mongodb","volumeMounts":[{"mountPath":"/data/db","name":"mongodb"}]}],"restartPolicy":"Never","volumes":[{"name":"mongodb","persistentVolumeClaim":{"claimName":"mongodb-mongodb-0"}}]}}}},"schedule":"0 3 * * 0"}}
-  name: mongodb-backup-clean
+  name: mongodb-backup
   namespace: {{ .Release.Namespace }}
+  labels:
+    app: mongodb
+    {{- include "mongodb.labels" . | nindent 4 }}
 spec:
-  concurrencyPolicy: Allow
-  failedJobsHistoryLimit: 1
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 3
+  successfulJobsHistoryLimit: 5
   jobTemplate:
-    metadata:
-      creationTimestamp: null
     spec:
       template:
         metadata:
-          creationTimestamp: null
+          labels:
+            app: mongodb-backup
         spec:
           containers:
-            - command:
-                - /bin/sh
+            - name: mongodb-backup
+              image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              command:
+                - /bin/bash
                 - -c
-                - find /data/db/dump-* -mtime +7 -exec rm -rf {} \;
-              image: mongo:5.0.2
-              imagePullPolicy: IfNotPresent
-              name: mongodb
-              resources: {}
-              terminationMessagePath: /dev/termination-log
-              terminationMessagePolicy: File
+                - |
+                  set -e
+                  TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+                  BACKUP_DIR="/backup/mongodb-$TIMESTAMP"
+                  mkdir -p $BACKUP_DIR
+                  
+                  echo "Starting MongoDB backup at $(date)"
+                  mongodump --host=mongodb.{{ .Release.Namespace }}.svc.cluster.local \
+                    --port={{ .Values.mongodb.port }} \
+                    --username=$MONGO_INITDB_ROOT_USERNAME \
+                    --password=$MONGO_INITDB_ROOT_PASSWORD \
+                    --authenticationDatabase=admin \
+                    --db={{ .Values.backup.database }} \
+                    --out=$BACKUP_DIR
+                  
+                  echo "Backup completed successfully at $(date)"
+                  echo "Backup saved to $BACKUP_DIR"
+                  
+                  # List existing backups and keep only the latest N
+                  ls -tp /backup/ | grep -v '/$' | tail -n +{{ add .Values.backup.retentionCount 1 }} | xargs -I {} rm -- /backup/{}
+              env:
+                - name: MONGO_INITDB_ROOT_USERNAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: mongodb-credentials
+                      key: username
+                - name: MONGO_INITDB_ROOT_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: mongodb-credentials
+                      key: password
               volumeMounts:
-                - mountPath: /data/db
-                  name: mongodb
-          dnsPolicy: ClusterFirst
-          restartPolicy: Never
-          schedulerName: default-scheduler
-          securityContext: {}
-          terminationGracePeriodSeconds: 30
+                - name: backup-volume
+                  mountPath: /backup
           volumes:
-            - name: mongodb
+            - name: backup-volume
               persistentVolumeClaim:
-                claimName: mongodb-mongodb-0
-  schedule: 0 3 * * 0
-  successfulJobsHistoryLimit: 3
-  suspend: false
+                claimName: mongodb-backup-pvc
+          restartPolicy: OnFailure

@@ -55,7 +55,7 @@ on:
         type: boolean
       deploy_mongodb:
         description: 'Deploy mongodb service'
-        required: false
+        required: true
         default: true
         type: boolean
       check_redis_only:

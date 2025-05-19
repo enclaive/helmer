@@ -1,16 +1,13 @@
-# Default values for mongodb
-# This is a YAML-formatted file.
-
+# Updated values.yaml with better defaults and additional backup configuration
 namespace: default
 replicaCount: 1
 
 image:
   repository: mongo
-  tag: "5.0.2"
+  tag: "5.0.20"  # Updated to latest 5.0.x version for security patches
   pullPolicy: IfNotPresent
 
-imagePullSecrets:
-  - name: aws-ecr-creds
+imagePullSecrets: []
 
 nameOverride: ""
 fullnameOverride: ""
@@ -23,27 +20,23 @@ service:
 # MongoDB configuration
 mongodb:
   config:
-    cacheSizeGB: 0.25
+    cacheSizeGB: 0.5
   port: 27017
 
 # MongoDB credentials
 auth:
   rootUsername: root
+  # For production, generate a strong password and update the values files
   rootPassword: root
-  # For production, use secretRef
-  # secretRef:
-  #   name: mongodb-credentials
-  #   userKey: username
-  #   passwordKey: password
 
-# Minimal resources to save costs
+# Improved default resources
 resources:
   limits:
-    cpu: 300m
-    memory: 512Mi
+    cpu: 1000m
+    memory: 1.5Gi
   requests:
-    cpu: 100m
-    memory: 256Mi
+    cpu: 500m
+    memory: 1Gi
 
 podAnnotations: {}
 podSecurityContext: {}
@@ -55,20 +48,21 @@ affinity: {}
 persistence:
   enabled: true
   storageClass: "openebs-hostpath"
-  size: "1Gi"
+  size: "5Gi"  # Increased from 1Gi to 5Gi for better performance
   accessMode: "ReadWriteOnce"
 
-# Backup configuration - minimal approach
+# Enhanced backup configuration
 backup:
   enabled: true
   # Schedule in cron format
-  schedule: "0 2 * * 0"  # Once per week on Sunday at 2am
-  # Number of days to keep backups
-  retentionDays: 7
+  schedule: "0 2 * * *"  # Daily at 2am
+  # Number of backups to retain
+  retentionCount: 7
   # Database to backup
   database: backend_db
-  # Cleanup cron schedule
-  cleanupSchedule: "0 3 * * 0"  # Every Sunday at 3am
+  # Storage for backups
+  storageClass: "openebs-hostpath"
+  storageSize: "10Gi"
 
 # Health check probes
 probes:

@@ -1,53 +1,54 @@
+# Production-specific values with better resources and security
 namespace: emcp-prod
 replicaCount: 1
 
 image:
   repository: mongo
-  tag: "5.0.2"
+  tag: "5.0.20"  # Updated to latest 5.0.x patch
   pullPolicy: IfNotPresent
 
-# Higher resources for production
+# Higher resources for production - better match for MongoDB needs
 resources:
   limits:
-    cpu: 500m
-    memory: 1Gi
+    cpu: 2000m     # 2 CPU cores
+    memory: 4Gi    # 4GB memory
   requests:
-    cpu: 250m
-    memory: 512Mi
+    cpu: 1000m     # 1 CPU core minimum
+    memory: 2Gi    # 2GB memory minimum
 
-# Use OpenEBS for storage like Redis
+# Use higher-quality storage for production
 persistence:
   enabled: true
-  storageClass: "openebs-hostpath"
-  size: "2Gi"
+  # Use a StorageClass with better durability if available in your cluster
+  # For AWS EKS, consider "gp3" or "io1" for better performance
+  storageClass: "openebs-hostpath"  
+  size: "20Gi"     # 20GB for production data
   accessMode: "ReadWriteOnce"
 
-# MongoDB configuration
+# MongoDB configuration with larger cache
 mongodb:
   config:
-    cacheSizeGB: 0.75
+    cacheSizeGB: 1.5  # Allocate more cache for better performance
   port: 27017
 
 # More frequent backups for production
 backup:
   enabled: true
-  schedule: "0 2 * * 0,3"  # Twice a week (Sunday and Wednesday) at 2am
-  retentionDays: 7
+  schedule: "0 */6 * * *"  # Every 6 hours
+  retentionCount: 14      # Keep last 14 backups
+  database: backend_db
+  storageClass: "openebs-hostpath"
+  storageSize: "40Gi"    # More space for production backups
 
-# Auth credentials
-auth:
-  rootUsername: root
-  rootPassword: root
-
-# Health check probes
+# Health check probes - more tolerant for production workloads
 probes:
   liveness:
-    initialDelaySeconds: 60
-    periodSeconds: 10
-    timeoutSeconds: 5
+    initialDelaySeconds: 90
+    periodSeconds: 20
+    timeoutSeconds: 10
     failureThreshold: 6
   readiness:
-    initialDelaySeconds: 30
+    initialDelaySeconds: 60
     periodSeconds: 10
     timeoutSeconds: 5
     failureThreshold: 3

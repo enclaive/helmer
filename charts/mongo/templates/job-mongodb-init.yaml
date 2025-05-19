@@ -32,7 +32,7 @@ spec:
             - |
               # Wait for MongoDB to become available
               echo "Waiting for MongoDB to become available..."
-              until mongo --host mongodb.{{ .Release.Namespace }}.svc.cluster.local --port 27017 -u {{ .Values.auth.rootUsername }} -p {{ .Values.auth.rootPassword }} --authenticationDatabase admin --eval "db.adminCommand('ping')" &>/dev/null; do
+              until mongo --host mongodb.{{ .Release.Namespace }}.svc.cluster.local --port {{ .Values.mongodb.port }} -u $USERNAME -p $PASSWORD --authenticationDatabase admin --eval "db.adminCommand('ping')" &>/dev/null; do
                 echo "MongoDB not yet available, waiting..."
                 sleep 5
               done
@@ -40,14 +40,25 @@ spec:
               echo "MongoDB is available, initializing database..."
               
               # Create a database and test collection
-              mongo --host mongodb.{{ .Release.Namespace }}.svc.cluster.local --port 27017 -u {{ .Values.auth.rootUsername }} -p {{ .Values.auth.rootPassword }} --authenticationDatabase admin <<EOF
-              use backend_db
+              mongo --host mongodb.{{ .Release.Namespace }}.svc.cluster.local --port {{ .Values.mongodb.port }} -u $USERNAME -p $PASSWORD --authenticationDatabase admin <<EOF
+              use {{ .Values.backup.database }}
               db.createCollection("initialization_test")
               db.initialization_test.insertOne({ message: "MongoDB initialized successfully", timestamp: new Date() })
               print("Database initialization completed successfully")
               EOF
               
               echo "MongoDB initialization script completed"
+          env:
+            - name: USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-credentials
+                  key: username
+            - name: PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-credentials
+                  key: password
           resources:
             limits:
               cpu: 200m
