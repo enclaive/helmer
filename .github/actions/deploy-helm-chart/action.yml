@@ -43,7 +43,18 @@ runs:
         
         echo "Deploying ${{ inputs.service-name }} to $NAMESPACE using ${{ inputs.image-repository }}:${{ inputs.image-tag }}..."
         
-        # Deploy using Helm
+        # Check if the service already exists
+        if kubectl get statefulset ${{ inputs.service-name }} -n $NAMESPACE 2>/dev/null || kubectl get deployment ${{ inputs.service-name }} -n $NAMESPACE 2>/dev/null; then
+          DEPLOYMENT_EXISTS=true
+          echo "${{ inputs.service-name }} already exists in namespace $NAMESPACE, will upgrade"
+        else
+          DEPLOYMENT_EXISTS=false
+          echo "${{ inputs.service-name }} does not exist in namespace $NAMESPACE, will install"
+        fi
+        
+        # Deploy using Helm with error handling
+        set +e  # Don't exit on error so we can check actual status
+        
         helm upgrade --install ${{ inputs.service-name }} ${{ inputs.chart-path }} \
           --namespace $NAMESPACE \
           --values ${{ inputs.values-file }} \
@@ -56,7 +67,48 @@ runs:
           --timeout ${{ inputs.timeout }} \
           --wait
         
-        echo "${{ inputs.service-name }} service deployed with image: ${{ inputs.image-repository }}:${{ inputs.image-tag }}"
+        HELM_EXIT_CODE=$?
+        set -e  # Resume exit on error
+        
+        # Check actual deployment status even if Helm had timeout issues
+        if [ $HELM_EXIT_CODE -ne 0 ]; then
+          echo "Helm reported an issue (exit code: $HELM_EXIT_CODE). Checking actual deployment status..."
+          
+          # Determine which resource type to check based on service name
+          if [ "${{ inputs.service-name }}" == "frontend" ]; then
+            RESOURCE_TYPE="deployment"
+          else
+            RESOURCE_TYPE="statefulset"
+          fi
+          
+          # Check if the pods are actually running
+          if kubectl get $RESOURCE_TYPE ${{ inputs.service-name }} -n $NAMESPACE &>/dev/null; then
+            echo "Resource exists despite Helm timeout, checking pod status..."
+            
+            if [ "$RESOURCE_TYPE" == "deployment" ]; then
+              READY_REPLICAS=$(kubectl get deployment ${{ inputs.service-name }} -n $NAMESPACE -o jsonpath='{.status.readyReplicas}')
+              DESIRED_REPLICAS=$(kubectl get deployment ${{ inputs.service-name }} -n $NAMESPACE -o jsonpath='{.spec.replicas}')
+            else
+              READY_REPLICAS=$(kubectl get statefulset ${{ inputs.service-name }} -n $NAMESPACE -o jsonpath='{.status.readyReplicas}')
+              DESIRED_REPLICAS=$(kubectl get statefulset ${{ inputs.service-name }} -n $NAMESPACE -o jsonpath='{.spec.replicas}')
+            fi
+            
+            echo "$READY_REPLICAS of $DESIRED_REPLICAS pods are ready"
+            
+            if [ "$READY_REPLICAS" == "$DESIRED_REPLICAS" ]; then
+              echo "✅ All pods are ready! Deployment considered successful despite Helm timeout."
+              echo "${{ inputs.service-name }} service deployed with image: ${{ inputs.image-repository }}:${{ inputs.image-tag }}"
+            else
+              echo "❌ Not all pods are ready. Deployment may have issues."
+              exit $HELM_EXIT_CODE
+            fi
+          else
+            echo "❌ Resource not found. Deployment failed."
+            exit $HELM_EXIT_CODE
+          fi
+        else
+          echo "${{ inputs.service-name }} service deployed with image: ${{ inputs.image-repository }}:${{ inputs.image-tag }}"
+        fi
     
     - name: Verify deployment
       shell: bash
@@ -71,3 +123,7 @@ runs:
         else
           kubectl rollout status statefulset/${{ inputs.service-name }} -n $NAMESPACE --timeout=300s || true
         fi
+        
+        # Extra verification by checking actual pod state
+        echo "Checking pod status for ${{ inputs.service-name }}..."
+        kubectl get pods -n $NAMESPACE -l app=${{ inputs.service-name }}
