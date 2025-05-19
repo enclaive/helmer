@@ -51,7 +51,7 @@ on:
       deploy_redis:
         description: 'Deploy redis service'
         required: false
-        default: true
+        default: false
         type: boolean
       deploy_mongodb:
         description: 'Deploy mongodb service'
