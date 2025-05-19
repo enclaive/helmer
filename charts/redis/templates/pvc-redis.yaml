@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: redis-data
+  name: data-redis
   namespace: {{ .Release.Namespace }}
   labels:
     app: redis

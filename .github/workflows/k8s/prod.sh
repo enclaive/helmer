@@ -29,9 +29,6 @@ helm upgrade --install redis ./charts/redis \
   --set image.tag="6.2-alpine" \
   --set image.pullPolicy=Always \
   --set service.type=ClusterIP \
-  --set service.port=6379 \
-  --set service.targetPort=6379 \
-  --set redis.port=6379 \
   --set redis.config.maxmemory="256mb" \
   --set redis.config.maxmemory-policy="allkeys-lru" \
   --set redis.config.appendonly="yes" \

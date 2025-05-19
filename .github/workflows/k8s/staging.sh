@@ -28,17 +28,13 @@ helm upgrade --install redis ./charts/redis \
   --set image.repository="redis" \
   --set image.tag="6.2-alpine" \
   --set image.pullPolicy=Always \
-  --set service.type=ClusterIP \
-  --set service.port=6379 \
-  --set service.targetPort=6379 \
-  --set redis.port=6379 \
   --set redis.config.maxmemory="128mb" \
   --set redis.config.maxmemory-policy="allkeys-lru" \
   --set redis.config.appendonly="yes" \
   --set redis.config.appendfsync="everysec" \
   --set persistence.enabled=true \
   --set persistence.storageClass="openebs-hostpath" \
-  --set persistence.size="768Mi" \
+  --set persistence.size="512Mi" \
   --timeout 10m \
   --wait
 

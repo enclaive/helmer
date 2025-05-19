@@ -24,22 +24,22 @@ on:
       deploy_admin:
         description: 'Deploy admin service'
         required: false
-        default: true
+        default: false
         type: boolean
       deploy_backend:
         description: 'Deploy backend service'
         required: false
-        default: true
+        default: false
         type: boolean
       deploy_frontend:
         description: 'Deploy frontend service'
         required: false
-        default: true
+        default: false
         type: boolean
       deploy_redis:
         description: 'Deploy redis service'
         required: false
-        default: true
+        default: false
         type: boolean
 
 env:
