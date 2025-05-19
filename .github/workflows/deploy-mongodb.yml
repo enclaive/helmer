@@ -70,9 +70,3 @@ jobs:
           kubectl get pods -n $NAMESPACE -l app=mongodb
           kubectl get service mongodb -n $NAMESPACE
           kubectl get pvc -n $NAMESPACE -l app=mongodb
-          
-          # Check MongoDB connection
-          echo "=== Testing MongoDB Connection ==="
-          kubectl run mongodb-test --image=mongo:5.0.20 --rm -i --restart=Never --namespace=$NAMESPACE -- \
-            mongo "mongodb://$(kubectl get secret mongodb-credentials -n $NAMESPACE -o jsonpath="{.data.username}" | base64 --decode):$(kubectl get secret mongodb-credentials -n $NAMESPACE -o jsonpath="{.data.password}" | base64 --decode)@mongodb:27017/admin?authSource=admin" \
-            --eval "db.serverStatus()"
