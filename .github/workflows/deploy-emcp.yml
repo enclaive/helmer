@@ -144,7 +144,7 @@ jobs:
       (needs.check-changes.outputs.redis_changed == 'true' || 
        (needs.check-changes.outputs.workflow_changed == 'true' && 
         (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_redis == 'true' || github.event.inputs.check_redis_only == 'true')))
-    uses: ./.github/workflows/services/deploy-redis.yml
+    uses: ./.github/workflows/deploy-redis.yml
     with:
       environment: ${{ needs.set-environment.outputs.environment }}
       namespace: ${{ needs.set-environment.outputs.namespace }}
@@ -163,7 +163,7 @@ jobs:
        (needs.check-changes.outputs.workflow_changed == 'true' && 
         (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_admin == 'true'))) &&
       (github.event_name != 'workflow_dispatch' || github.event.inputs.check_redis_only != 'true')
-    uses: ./.github/workflows/services/deploy-admin.yml
+    uses: ./.github/workflows/deploy-admin.yml
     with:
       environment: ${{ needs.set-environment.outputs.environment }}
       namespace: ${{ needs.set-environment.outputs.namespace }}
@@ -182,7 +182,7 @@ jobs:
        (needs.check-changes.outputs.workflow_changed == 'true' && 
         (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_backend == 'true'))) &&
       (github.event_name != 'workflow_dispatch' || github.event.inputs.check_redis_only != 'true')
-    uses: ./.github/workflows/services/deploy-backend.yml
+    uses: ./.github/workflows/deploy-backend.yml
     with:
       environment: ${{ needs.set-environment.outputs.environment }}
       namespace: ${{ needs.set-environment.outputs.namespace }}
@@ -201,7 +201,7 @@ jobs:
        (needs.check-changes.outputs.workflow_changed == 'true' && 
         (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_frontend == 'true'))) &&
       (github.event_name != 'workflow_dispatch' || github.event.inputs.check_redis_only != 'true')
-    uses: ./.github/workflows/services/deploy-frontend.yml
+    uses: ./.github/workflows/deploy-frontend.yml
     with:
       environment: ${{ needs.set-environment.outputs.environment }}
       namespace: ${{ needs.set-environment.outputs.namespace }}
