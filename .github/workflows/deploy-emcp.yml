@@ -263,7 +263,6 @@ jobs:
     needs: [set-environment, check-changes, deploy-redis]
     if: |
       always() && 
-      needs.deploy-redis.result != 'skipped' &&
       (needs.check-changes.outputs.mongodb_changed == 'true' || 
        (needs.check-changes.outputs.workflow_changed == 'true' && 
         (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_mongodb == 'true'))) &&
