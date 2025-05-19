@@ -4,12 +4,24 @@ on:
   push:
     branches: [ main, dev, staging ]
     paths:
-      - 'charts/admin/**'
-      - 'charts/backend/**'
-      - 'charts/frontend/**'
-      - 'charts/redis/**'
+      - 'charts/admin/templates/**'
+      - 'charts/admin/Chart.yaml'
+      - 'charts/admin/values.yaml'
+      - 'charts/admin/environments/*.yaml'
+      - 'charts/backend/templates/**'
+      - 'charts/backend/Chart.yaml'
+      - 'charts/backend/values.yaml'
+      - 'charts/backend/environments/*.yaml'
+      - 'charts/frontend/templates/**'
+      - 'charts/frontend/Chart.yaml'
+      - 'charts/frontend/values.yaml'
+      - 'charts/frontend/environments/*.yaml'
+      - 'charts/redis/templates/**'
+      - 'charts/redis/Chart.yaml'
+      - 'charts/redis/values.yaml'
+      - 'charts/redis/environments/*.yaml'
       - '.github/workflows/deploy-emcp.yml'
-      - '.github/workflows/k8s/**'
+      - '.github/workflows/k8s/*.sh'
   workflow_dispatch:
     inputs:
       environment:
@@ -24,20 +36,25 @@ on:
       deploy_admin:
         description: 'Deploy admin service'
         required: false
-        default: false
+        default: true
         type: boolean
       deploy_backend:
         description: 'Deploy backend service'
         required: false
-        default: false
+        default: true
         type: boolean
       deploy_frontend:
         description: 'Deploy frontend service'
         required: false
-        default: false
+        default: true
         type: boolean
       deploy_redis:
         description: 'Deploy redis service'
+        required: false
+        default: true
+        type: boolean
+      check_redis_only:
+        description: 'Only check if Redis exists without redeploying'
         required: false
         default: false
         type: boolean
@@ -104,11 +121,20 @@ jobs:
         run: |
           # For workflow_dispatch, use the input values
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "admin_changed=${{ github.event.inputs.deploy_admin }}" >> $GITHUB_OUTPUT
-            echo "backend_changed=${{ github.event.inputs.deploy_backend }}" >> $GITHUB_OUTPUT
-            echo "frontend_changed=${{ github.event.inputs.deploy_frontend }}" >> $GITHUB_OUTPUT
-            echo "redis_changed=${{ github.event.inputs.deploy_redis }}" >> $GITHUB_OUTPUT
-            echo "workflow_changed=true" >> $GITHUB_OUTPUT
+            # Check if check_redis_only is true
+            if [ "${{ github.event.inputs.check_redis_only }}" == "true" ]; then
+              echo "admin_changed=false" >> $GITHUB_OUTPUT
+              echo "backend_changed=false" >> $GITHUB_OUTPUT
+              echo "frontend_changed=false" >> $GITHUB_OUTPUT
+              echo "redis_changed=false" >> $GITHUB_OUTPUT
+              echo "workflow_changed=true" >> $GITHUB_OUTPUT
+            else
+              echo "admin_changed=${{ github.event.inputs.deploy_admin }}" >> $GITHUB_OUTPUT
+              echo "backend_changed=${{ github.event.inputs.deploy_backend }}" >> $GITHUB_OUTPUT
+              echo "frontend_changed=${{ github.event.inputs.deploy_frontend }}" >> $GITHUB_OUTPUT
+              echo "redis_changed=${{ github.event.inputs.deploy_redis }}" >> $GITHUB_OUTPUT
+              echo "workflow_changed=true" >> $GITHUB_OUTPUT
+            fi
             exit 0
           fi
           
@@ -126,38 +152,58 @@ jobs:
           REDIS_CHANGED="false"
           WORKFLOW_CHANGED="false"
           
-          # Check if specific folders were modified
+          # Check if specific folders were modified with precise targeting
           if echo "$CHANGED_FILES" | grep -q "^charts/admin/"; then
-            echo "Admin service files changed"
-            ADMIN_CHANGED="true"
+            # Look for relevant changes in admin
+            if echo "$CHANGED_FILES" | grep -E -q "^charts/admin/(templates|values\.yaml|Chart\.yaml|environments/values\.[^/]+\.yaml)"; then
+              echo "Admin service files changed"
+              ADMIN_CHANGED="true"
+            else
+              echo "Changes in admin directory don't affect deployment"
+            fi
           else
             echo "No changes in admin service"
           fi
           
           if echo "$CHANGED_FILES" | grep -q "^charts/backend/"; then
-            echo "Backend service files changed"
-            BACKEND_CHANGED="true"
+            # Look for relevant changes in backend
+            if echo "$CHANGED_FILES" | grep -E -q "^charts/backend/(templates|values\.yaml|Chart\.yaml|environments/values\.[^/]+\.yaml)"; then
+              echo "Backend service files changed"
+              BACKEND_CHANGED="true"
+            else
+              echo "Changes in backend directory don't affect deployment"
+            fi
           else
             echo "No changes in backend service"
           fi
           
           if echo "$CHANGED_FILES" | grep -q "^charts/frontend/"; then
-            echo "Frontend service files changed"
-            FRONTEND_CHANGED="true"
+            # Look for relevant changes in frontend
+            if echo "$CHANGED_FILES" | grep -E -q "^charts/frontend/(templates|values\.yaml|Chart\.yaml|environments/values\.[^/]+\.yaml)"; then
+              echo "Frontend service files changed"
+              FRONTEND_CHANGED="true"
+            else
+              echo "Changes in frontend directory don't affect deployment"
+            fi
           else
             echo "No changes in frontend service"
           fi
           
           if echo "$CHANGED_FILES" | grep -q "^charts/redis/"; then
-            echo "Redis service files changed"
-            REDIS_CHANGED="true"
+            # Look for relevant changes in redis
+            if echo "$CHANGED_FILES" | grep -E -q "^charts/redis/(templates|values\.yaml|Chart\.yaml|environments/values\.[^/]+\.yaml)"; then
+              echo "Redis service files changed"
+              REDIS_CHANGED="true"
+            else
+              echo "Changes in redis directory don't affect deployment"
+            fi
           else
             echo "No changes in redis service"
           fi
           
-          # Check if workflow files changed
-          if echo "$CHANGED_FILES" | grep -q "^.github/workflows/"; then
-            echo "Workflow files changed"
+          # Check if workflow files changed - be more selective
+          if echo "$CHANGED_FILES" | grep -E -q "^\.github/workflows/(deploy-emcp\.yml|k8s/(common|dev|staging|prod)\.sh)"; then
+            echo "Deployment workflow files changed"
             WORKFLOW_CHANGED="true"
           else
             echo "No changes in workflow files"
@@ -183,15 +229,56 @@ jobs:
     if: |
       always() && 
       (needs.check-changes.outputs.redis_changed == 'true' || 
-       needs.check-changes.outputs.workflow_changed == 'true')
+       (needs.check-changes.outputs.workflow_changed == 'true' && 
+        (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_redis == 'true' || github.event.inputs.check_redis_only == 'true')))
     runs-on: ubuntu-latest
     environment: ${{ needs.set-environment.outputs.environment }}
     
     steps:
+      - name: Check Redis requirements
+        id: check-redis
+        run: |
+          # Configure AWS credentials first for kubectl
+          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws configure set region ${{ env.AWS_REGION }}
+          
+          # Update kubeconfig
+          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
+          
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          
+          # Handle check_redis_only scenario
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${{ github.event.inputs.check_redis_only }}" == "true" ]; then
+            echo "Redis deployment check only mode activated"
+            
+            # Create namespace if it doesn't exist
+            kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+            
+            # Check if Redis exists
+            if kubectl get statefulset redis -n $NAMESPACE &>/dev/null; then
+              echo "✅ Redis service already exists in namespace $NAMESPACE"
+              # This is just a verification step, so we skip deployment
+              echo "skip_deployment=true" >> $GITHUB_OUTPUT
+            else
+              echo "⚠️ Redis service not found in namespace $NAMESPACE"
+              # We need Redis, so proceed with deployment
+              echo "skip_deployment=false" >> $GITHUB_OUTPUT
+            fi
+          elif [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${{ github.event.inputs.deploy_redis }}" == "false" ]; then
+            echo "Redis deployment explicitly skipped through workflow input"
+            echo "skip_deployment=true" >> $GITHUB_OUTPUT
+          else
+            echo "Continuing with normal Redis deployment"
+            echo "skip_deployment=false" >> $GITHUB_OUTPUT
+          fi
+      
       - name: Checkout code
+        if: steps.check-redis.outputs.skip_deployment != 'true'
         uses: actions/checkout@v3
         
       - name: Configure AWS credentials
+        if: steps.check-redis.outputs.skip_deployment != 'true'
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -199,29 +286,33 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           
       - name: Update kubeconfig
+        if: steps.check-redis.outputs.skip_deployment != 'true'
         run: |
           aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
           
       - name: Set up Helm
+        if: steps.check-redis.outputs.skip_deployment != 'true'
         uses: azure/setup-helm@v3
         with:
           version: 'v3.12.0'
           
       # Create namespace first
       - name: Create namespace
+        if: steps.check-redis.outputs.skip_deployment != 'true'
         run: |
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           echo "Creating namespace $NAMESPACE if it doesn't exist..."
           kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
       
       - name: Deploy Redis Service
+        if: steps.check-redis.outputs.skip_deployment != 'true'
         run: |
           ENV="${{ needs.set-environment.outputs.environment }}"
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
           echo "Deploying Redis service to $NAMESPACE environment..."
           
-          # Deploy using environment-specific values file
+          # Deploy using environment-specific values file only, removing redundant port configs
           helm upgrade --install redis ./charts/redis \
             --namespace $NAMESPACE \
             --values ./charts/redis/environments/values.${ENV}.yaml \
@@ -266,16 +357,32 @@ jobs:
     needs: [set-environment, check-changes, deploy-redis]
     if: |
       always() && 
+      needs.deploy-redis.result != 'skipped' &&
       (needs.check-changes.outputs.admin_changed == 'true' || 
-      needs.check-changes.outputs.workflow_changed == 'true')
+       (needs.check-changes.outputs.workflow_changed == 'true' && 
+        (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_admin == 'true'))) &&
+      (github.event_name != 'workflow_dispatch' || github.event.inputs.check_redis_only != 'true')
     runs-on: ubuntu-latest
     environment: ${{ needs.set-environment.outputs.environment }}
     
     steps:
+      - name: Check if deployment is needed
+        id: check-deploy
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${{ github.event.inputs.deploy_admin }}" == "false" ]; then
+            echo "Admin deployment explicitly skipped through workflow input"
+            echo "skip_deployment=true" >> $GITHUB_OUTPUT
+          else
+            echo "Admin deployment will proceed"
+            echo "skip_deployment=false" >> $GITHUB_OUTPUT
+          fi
+      
       - name: Checkout code
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         uses: actions/checkout@v3
         
       - name: Configure AWS credentials
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -283,16 +390,19 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           
       - name: Update kubeconfig
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         run: |
           aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
           
       - name: Set up Helm
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         uses: azure/setup-helm@v3
         with:
           version: 'v3.12.0'
           
       # Create namespace first
       - name: Create namespace
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         run: |
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           echo "Creating namespace $NAMESPACE if it doesn't exist..."
@@ -300,6 +410,7 @@ jobs:
       
       # Create AWS ECR pull secret
       - name: Create ECR pull credentials
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         run: |
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
@@ -317,6 +428,7 @@ jobs:
           echo "Created ECR pull secret: aws-ecr-creds"
       
       - name: Set Admin image tag
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         id: set-tag
         run: |
           ENV="${{ needs.set-environment.outputs.environment }}"
@@ -342,6 +454,7 @@ jobs:
       
       # Deploy Admin service directly in the workflow instead of using scripts
       - name: Deploy Admin Service
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         run: |
           ENV="${{ needs.set-environment.outputs.environment }}"
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
@@ -361,7 +474,7 @@ jobs:
             LOG_FORMAT="pretty"
           fi
           
-          # Deploy using Helm with ECR image
+          # Deploy using Helm with ECR image - no redundant port configs
           helm upgrade --install admin ./charts/admin \
             --namespace $NAMESPACE \
             --values ./charts/admin/environments/values.${ENV}.yaml \
@@ -382,6 +495,7 @@ jobs:
           
       # Verify deployment status
       - name: Verify Admin deployment
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         run: |
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
@@ -389,7 +503,7 @@ jobs:
           kubectl rollout status statefulset/admin -n $NAMESPACE --timeout=300s || true
           
       - name: Report Admin deployment status
-        if: always()
+        if: always() && steps.check-deploy.outputs.skip_deployment != 'true'
         run: |
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
@@ -415,16 +529,32 @@ jobs:
     needs: [set-environment, check-changes, deploy-redis, deploy-admin]
     if: |
       always() && 
+      needs.deploy-redis.result != 'skipped' &&
       (needs.check-changes.outputs.backend_changed == 'true' || 
-       needs.check-changes.outputs.workflow_changed == 'true')
+       (needs.check-changes.outputs.workflow_changed == 'true' && 
+        (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_backend == 'true'))) &&
+      (github.event_name != 'workflow_dispatch' || github.event.inputs.check_redis_only != 'true')
     runs-on: ubuntu-latest
     environment: ${{ needs.set-environment.outputs.environment }}
     
     steps:
+      - name: Check if deployment is needed
+        id: check-deploy
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${{ github.event.inputs.deploy_backend }}" == "false" ]; then
+            echo "Backend deployment explicitly skipped through workflow input"
+            echo "skip_deployment=true" >> $GITHUB_OUTPUT
+          else
+            echo "Backend deployment will proceed"
+            echo "skip_deployment=false" >> $GITHUB_OUTPUT
+          fi
+    
       - name: Checkout code
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         uses: actions/checkout@v3
         
       - name: Configure AWS credentials
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -432,16 +562,27 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           
       - name: Update kubeconfig
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         run: |
           aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
           
       - name: Set up Helm
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         uses: azure/setup-helm@v3
         with:
           version: 'v3.12.0'
       
-      # Create AWS ECR pull secret (in case admin job failed)
+      # Create namespace first
+      - name: Create namespace
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
+        run: |
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          echo "Creating namespace $NAMESPACE if it doesn't exist..."
+          kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+      
+      # Create AWS ECR pull secret
       - name: Create ECR pull credentials
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         run: |
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
@@ -459,6 +600,7 @@ jobs:
           echo "Created ECR pull secret: aws-ecr-creds"
       
       - name: Set Backend image tag
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         id: set-tag
         run: |
           ENV="${{ needs.set-environment.outputs.environment }}"
@@ -484,6 +626,7 @@ jobs:
       
       # Deploy Backend service
       - name: Deploy Backend Service
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         run: |
           ENV="${{ needs.set-environment.outputs.environment }}"
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
@@ -503,7 +646,7 @@ jobs:
             LOG_FORMAT="pretty"
           fi
           
-          # Deploy using Helm with ECR image
+          # Deploy using Helm with ECR image - no redundant port configs
           helm upgrade --install backend ./charts/backend \
             --namespace $NAMESPACE \
             --values ./charts/backend/environments/values.${ENV}.yaml \
@@ -531,6 +674,7 @@ jobs:
           
       # Verify deployment status
       - name: Verify Backend deployment
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         run: |
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
@@ -538,7 +682,7 @@ jobs:
           kubectl rollout status statefulset/backend -n $NAMESPACE --timeout=300s || true
           
       - name: Report Backend deployment status
-        if: always()
+        if: always() && steps.check-deploy.outputs.skip_deployment != 'true'
         run: |
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
@@ -561,19 +705,35 @@ jobs:
 
   deploy-frontend:
     name: Deploy Frontend to EKS
-    needs: [set-environment, check-changes, deploy-backend]
+    needs: [set-environment, check-changes, deploy-redis, deploy-backend]
     if: |
       always() && 
+      needs.deploy-redis.result != 'skipped' &&
       (needs.check-changes.outputs.frontend_changed == 'true' || 
-       needs.check-changes.outputs.workflow_changed == 'true')
+       (needs.check-changes.outputs.workflow_changed == 'true' && 
+        (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_frontend == 'true'))) &&
+      (github.event_name != 'workflow_dispatch' || github.event.inputs.check_redis_only != 'true')
     runs-on: ubuntu-latest
     environment: ${{ needs.set-environment.outputs.environment }}
     
     steps:
+      - name: Check if deployment is needed
+        id: check-deploy
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${{ github.event.inputs.deploy_frontend }}" == "false" ]; then
+            echo "Frontend deployment explicitly skipped through workflow input"
+            echo "skip_deployment=true" >> $GITHUB_OUTPUT
+          else
+            echo "Frontend deployment will proceed"
+            echo "skip_deployment=false" >> $GITHUB_OUTPUT
+          fi
+    
       - name: Checkout code
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         uses: actions/checkout@v3
         
       - name: Configure AWS credentials
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -581,16 +741,27 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           
       - name: Update kubeconfig
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         run: |
           aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
           
       - name: Set up Helm
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         uses: azure/setup-helm@v3
         with:
           version: 'v3.12.0'
       
-      # Create AWS ECR pull secret (in case previous jobs failed)
+      # Create namespace first
+      - name: Create namespace
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
+        run: |
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          echo "Creating namespace $NAMESPACE if it doesn't exist..."
+          kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+      
+      # Create AWS ECR pull secret
       - name: Create ECR pull credentials
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         run: |
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
@@ -608,6 +779,7 @@ jobs:
           echo "Created ECR pull secret: aws-ecr-creds"
       
       - name: Set Frontend image tag
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         id: set-tag
         run: |
           ENV="${{ needs.set-environment.outputs.environment }}"
@@ -633,6 +805,7 @@ jobs:
       
       # Clean up any existing failed resources and TLS secrets causing errors
       - name: Clean up resources if needed
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         run: |
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
@@ -654,6 +827,7 @@ jobs:
       
       # Deploy Frontend service
       - name: Deploy Frontend Service
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         run: |
           ENV="${{ needs.set-environment.outputs.environment }}"
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
@@ -673,7 +847,7 @@ jobs:
             LOG_FORMAT="pretty"
           fi
           
-          # Deploy using Helm with ECR image
+          # Deploy using Helm with ECR image - no redundant port configs
           helm upgrade --install frontend ./charts/frontend \
             --namespace $NAMESPACE \
             --values ./charts/frontend/environments/values.${ENV}.yaml \
@@ -695,6 +869,7 @@ jobs:
           
       # Verify deployment status
       - name: Verify Frontend deployment
+        if: steps.check-deploy.outputs.skip_deployment != 'true'
         run: |
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
@@ -702,7 +877,7 @@ jobs:
           kubectl rollout status deployment/frontend -n $NAMESPACE --timeout=300s || true
           
       - name: Report Frontend deployment status
-        if: always()
+        if: always() && steps.check-deploy.outputs.skip_deployment != 'true'
         run: |
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
           
