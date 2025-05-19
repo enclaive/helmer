@@ -1,0 +1,142 @@
+name: Deploy Backend Service
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      namespace:
+        required: true
+        type: string
+      skip_deployment:
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+
+jobs:
+  deploy-backend:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.skip_deployment }}
+    env:
+      AWS_REGION: eu-central-1
+      EKS_CLUSTER_NAME: emcp-eks-cluster
+      AWS_ACCOUNT_ID: 886093416603
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup EKS
+        uses: ./.github/actions/setup-eks
+        with:
+          aws-access-key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          eks-cluster: ${{ env.EKS_CLUSTER_NAME }}
+          namespace: ${{ inputs.namespace }}
+      
+      - name: Create ECR pull credentials
+        uses: ./.github/actions/create-ecr-credentials
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          aws-account-id: ${{ env.AWS_ACCOUNT_ID }}
+          namespace: ${{ inputs.namespace }}
+          secret-name: aws-ecr-creds
+      
+      - name: Set Backend image tag
+        id: set-tag
+        run: |
+          ENV="${{ inputs.environment }}"
+          
+          # Use simple tag names
+          if [ "$ENV" == "prod" ]; then
+            TAG="prod"
+          elif [ "$ENV" == "staging" ]; then
+            TAG="staging"
+          elif [ "$ENV" == "dev" ]; then
+            TAG="dev"
+          fi
+          
+          # Full ECR image path
+          ECR_IMAGE="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/backend0:${TAG}"
+          
+          echo "backend_tag=$TAG" >> $GITHUB_OUTPUT
+          echo "backend_image=$ECR_IMAGE" >> $GITHUB_OUTPUT
+          echo "BACKEND_TAG=$TAG" >> $GITHUB_ENV
+          echo "BACKEND_IMAGE=$ECR_IMAGE" >> $GITHUB_ENV
+          
+          echo "Using image: $ECR_IMAGE"
+      
+      - name: Determine log settings
+        id: log-settings
+        run: |
+          ENV="${{ inputs.environment }}"
+          
+          # Determine log level based on environment
+          if [ "$ENV" == "prod" ]; then
+            LOG_LEVEL="info"
+            LOG_FORMAT="json"
+          elif [ "$ENV" == "staging" ]; then
+            LOG_LEVEL="info"
+            LOG_FORMAT="json"
+          else
+            LOG_LEVEL="debug"
+            LOG_FORMAT="pretty"
+          fi
+          
+          echo "log_level=$LOG_LEVEL" >> $GITHUB_OUTPUT
+          echo "log_format=$LOG_FORMAT" >> $GITHUB_OUTPUT
+      
+      - name: Deploy Backend
+        uses: ./.github/actions/deploy-helm-chart
+        with:
+          service-name: backend
+          chart-path: ./charts/backend
+          values-file: ./charts/backend/environments/values.${{ inputs.environment }}.yaml
+          namespace: ${{ inputs.namespace }}
+          environment: ${{ inputs.environment }}
+          image-repository: "${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/backend0"
+          image-tag: ${{ steps.set-tag.outputs.backend_tag }}
+          additional-set-values: >-
+            --set namespace=${{ inputs.namespace }}
+            --set environment=${{ inputs.environment }}
+            --set logging.level=${{ steps.log-settings.outputs.log_level }}
+            --set logging.format=${{ steps.log-settings.outputs.log_format }}
+            --set features.enableBackups=false
+            --set mongodb.host=mongodb
+            --set mongodb.port=27017
+            --set mongodb.database=backend_db
+            --set mongodb.username=root
+            --set mongodb.password=root
+            --set redis.host=redis
+            --set redis.port=6379
+          timeout: 10m
+      
+      - name: Report Backend deployment status
+        if: always()
+        run: |
+          NAMESPACE="${{ inputs.namespace }}"
+          
+          echo "=== Backend Deployment Status for ${{ inputs.environment }} ==="
+          echo "Backend: $(kubectl get statefulset backend -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not found')"
+          
+          echo "=== Backend Pod Status ==="
+          kubectl get pods -n $NAMESPACE -l app=backend || echo "No backend pods found"
+          
+          echo "=== Pod Details ==="
+          # First check if the pod exists before trying to describe it
+          if kubectl get pod backend-0 -n $NAMESPACE &>/dev/null; then
+            kubectl describe pod backend-0 -n $NAMESPACE
+          else
+            echo "Backend pod not found. Deployment may have failed or not started yet."
+          fi
+          
+          echo "=== Backend Service Status ==="
+          kubectl get service backend -n $NAMESPACE || echo "No backend service found"

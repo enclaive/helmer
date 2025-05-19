@@ -1,0 +1,45 @@
+# EKS and AWS Configuration Variables
+eks:
+    region: eu-central-1
+    cluster_name: emcp-eks-cluster
+    account_id: 886093416603
+  
+  # Service-specific configuration
+  services:
+    redis:
+      port: 6379
+      image:
+        repository: redis
+        tag: 6.2-alpine
+    
+    admin:
+      port: 3000
+      image:
+        repository: admin
+        base_ecr: 886093416603.dkr.ecr.eu-central-1.amazonaws.com
+    
+    backend:
+      port: 8080
+      image:
+        repository: backend0
+        base_ecr: 886093416603.dkr.ecr.eu-central-1.amazonaws.com
+    
+    frontend:
+      port: 3000
+      image:
+        repository: frontend
+        base_ecr: 886093416603.dkr.ecr.eu-central-1.amazonaws.com
+  
+  # Environment-specific settings
+  environments:
+    dev:
+      log_level: debug
+      log_format: pretty
+    
+    staging:
+      log_level: info
+      log_format: json
+    
+    prod:
+      log_level: info
+      log_format: json
