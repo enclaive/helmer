@@ -1,5 +1,4 @@
-
-# charts/frontend/environments/values.dev.yaml
+# Updated values.dev.yaml
 namespace: emcp-dev
 domain: dev.enclaive.cloud
 replicaCount: 1
@@ -9,9 +8,16 @@ image:
   tag: "dev"
   pullPolicy: Always
 
-# Explicitly disable ingress
+# Configure ingress for development
 ingress:
-  enabled: false
+  enabled: true
+  className: "public"
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  certManager:
+    enabled: true
+    issuer: "letsencrypt"
+  additionalHosts: []  # No additional hosts for dev environment
 
 # Resources for development environment
 resources:

@@ -1,5 +1,5 @@
+# Updated ingress configuration for frontend values.yaml
 
-# charts/frontend/values.yaml
 # Default values for frontend
 # This is a YAML-formatted file.
 
@@ -26,9 +26,19 @@ service:
   port: 3000
   targetPort: 3000
 
-# Explicitly disable ingress
+# Enhanced ingress configuration
 ingress:
-  enabled: false
+  enabled: false  # Enable/disable ingress resource creation
+  className: "public"  # IngressClass to use
+  annotations: {}  # Custom annotations
+  certManager:
+    enabled: true
+    issuer: "letsencrypt"  # Certificate issuer
+  additionalHosts: []  # Additional hostnames to include
+  # Example for additional hosts:
+  # additionalHosts:
+  #   - govtech.enclaive.cloud
+  #   - prianto.enclaive.cloud
 
 resources:
   limits:

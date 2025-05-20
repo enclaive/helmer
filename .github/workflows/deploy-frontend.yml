@@ -74,25 +74,6 @@ jobs:
           
           echo "Using image: $ECR_IMAGE"
       
-      - name: Clean up resources if needed
-        run: |
-          NAMESPACE="${{ inputs.namespace }}"
-          
-          # First, remove any problematic TLS secrets
-          echo "Removing any problematic TLS secrets..."
-          kubectl delete secret frontend-ingress-tls -n $NAMESPACE --ignore-not-found
-          kubectl delete secret frontend-prianto-ingress-tls -n $NAMESPACE --ignore-not-found
-          kubectl delete secret frontend-govtech-ingress-tls -n $NAMESPACE --ignore-not-found
-          
-          # Clean up any existing frontend StatefulSet (from previous versions)
-          if kubectl get statefulset frontend -n $NAMESPACE &>/dev/null; then
-            echo "Found old frontend StatefulSet. Removing..."
-            kubectl delete statefulset frontend -n $NAMESPACE
-            
-            # Wait for resources to be fully removed
-            echo "Waiting for resources to be fully removed..."
-            sleep 10
-          fi
       
       - name: Determine log settings
         id: log-settings

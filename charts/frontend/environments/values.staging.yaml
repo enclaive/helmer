@@ -1,4 +1,4 @@
-# charts/frontend/environments/values.staging.yaml
+# Updated values.staging.yaml
 namespace: emcp-staging
 domain: staging.enclaive.cloud
 replicaCount: 1
@@ -7,6 +7,18 @@ image:
   repository: 886093416603.dkr.ecr.eu-central-1.amazonaws.com/frontend
   tag: "staging"
   pullPolicy: Always
+
+# Enable ingress for staging
+ingress:
+  enabled: true
+  className: "public"
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  certManager:
+    enabled: true
+    issuer: "letsencrypt"
+  additionalHosts: []  # No additional hosts for staging
 
 # Resources for staging environment
 resources:
