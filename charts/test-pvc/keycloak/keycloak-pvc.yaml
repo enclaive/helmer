@@ -1,0 +1,40 @@
+apiVersion: v1
+items:
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    annotations:
+      pv.kubernetes.io/bind-completed: "yes"
+      pv.kubernetes.io/bound-by-controller: "yes"
+      volume.beta.kubernetes.io/storage-provisioner: driver.longhorn.io
+      volume.kubernetes.io/storage-provisioner: driver.longhorn.io
+    creationTimestamp: "2024-12-13T16:14:58Z"
+    finalizers:
+    - kubernetes.io/pvc-protection
+    labels:
+      app.kubernetes.io/component: primary
+      app.kubernetes.io/instance: emcp-dev-keycloak
+      app.kubernetes.io/name: postgresql
+      recurring-job-group.longhorn.io/default: enabled
+    name: data-emcp-dev-keycloak-postgresql-0
+    namespace: emcp-dev
+    resourceVersion: "556404072"
+    uid: fba5b182-f1d4-4a0f-aac2-e00bd8bb8412
+  spec:
+    accessModes:
+    - ReadWriteOnce
+    resources:
+      requests:
+        storage: 8Gi
+    storageClassName: longhorn
+    volumeMode: Filesystem
+    volumeName: pvc-fba5b182-f1d4-4a0f-aac2-e00bd8bb8412
+  status:
+    accessModes:
+    - ReadWriteOnce
+    capacity:
+      storage: 8Gi
+    phase: Bound
+kind: List
+metadata:
+  resourceVersion: ""

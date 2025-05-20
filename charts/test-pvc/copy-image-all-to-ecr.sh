@@ -14,10 +14,7 @@ AWS_ACCOUNT_ID="886093416603"
 
 # Services to migrate (add or remove as needed)
 declare -a SERVICES=(
-  "emcp/admin:dev"
-  "emcp/frontend:dev"
-  "emcp/backend0:dev"
-  "emcp/emcp-workload-runner:dev"
+  "emcp/kc-provider"
 )
 
 echo "===== COPYING IMAGES FROM HARBOR TO ECR ====="

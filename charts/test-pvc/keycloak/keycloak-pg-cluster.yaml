@@ -1,0 +1,202 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"postgresql.cnpg.io/v1","kind":"Cluster","metadata":{"annotations":{},"name":"keycloak-cnpg-cluster","namespace":"emcp-prod"},"spec":{"backup":{"barmanObjectStore":{"data":{"compression":"gzip","encryption":"aws:kms","immediateCheckpoint":false,"jobs":2},"destinationPath":"s3://production-keycloak-cnpg-backup-fra/production-keycloak-cnpg-backup/","s3Credentials":{"accessKeyId":{"key":"AWS_S3_ACCESS_KEY_ID","name":"keycloak-cnpg-backup-secrets"},"secretAccessKey":{"key":"AWS_S3_ACCESS_SECRET_KEY","name":"keycloak-cnpg-backup-secrets"}},"wal":{"compression":"gzip","encryption":"aws:kms"}},"retentionPolicy":"30d"},"bootstrap":{"initdb":{"database":"bitnami_keycloak","owner":"bn_keycloak","secret":{"name":"keycloak-cnpg-user-secret"}}},"description":"CloudNativePG for Keycloak","enableSuperuserAccess":true,"imageName":"ghcr.io/cloudnative-pg/postgresql:17.2","instances":1,"postgresql":{"parameters":{"shared_buffers":"256MB"}},"primaryUpdateStrategy":"unsupervised","startDelay":300,"stopDelay":300,"storage":{"size":"8Gi","storageClass":"longhorn"},"superuserSecret":{"name":"keycloak-cnpg-superuser-secret"}}}
+  creationTimestamp: "2025-03-04T15:12:46Z"
+  generation: 1
+  name: keycloak-cnpg-cluster
+  namespace: emcp-prod
+  resourceVersion: "822168812"
+  uid: bb8e3b04-4c32-4071-920e-41a8a79c1a6f
+spec:
+  affinity:
+    podAntiAffinityType: preferred
+  backup:
+    barmanObjectStore:
+      data:
+        compression: gzip
+        encryption: aws:kms
+        jobs: 2
+      destinationPath: s3://production-keycloak-cnpg-backup-fra/production-keycloak-cnpg-backup/
+      s3Credentials:
+        accessKeyId:
+          key: AWS_S3_ACCESS_KEY_ID
+          name: keycloak-cnpg-backup-secrets
+        secretAccessKey:
+          key: AWS_S3_ACCESS_SECRET_KEY
+          name: keycloak-cnpg-backup-secrets
+      wal:
+        compression: gzip
+        encryption: aws:kms
+    retentionPolicy: 30d
+    target: prefer-standby
+  bootstrap:
+    initdb:
+      database: bitnami_keycloak
+      encoding: UTF8
+      localeCType: C
+      localeCollate: C
+      owner: bn_keycloak
+      secret:
+        name: keycloak-cnpg-user-secret
+  description: CloudNativePG for Keycloak
+  enablePDB: true
+  enableSuperuserAccess: true
+  failoverDelay: 0
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.2
+  instances: 1
+  logLevel: info
+  maxSyncReplicas: 0
+  minSyncReplicas: 0
+  monitoring:
+    customQueriesConfigMap:
+    - key: queries
+      name: cnpg-default-monitoring
+    disableDefaultQueries: false
+    enablePodMonitor: false
+  postgresGID: 26
+  postgresUID: 26
+  postgresql:
+    parameters:
+      archive_mode: "on"
+      archive_timeout: 5min
+      dynamic_shared_memory_type: posix
+      log_destination: csvlog
+      log_directory: /controller/log
+      log_filename: postgres
+      log_rotation_age: "0"
+      log_rotation_size: "0"
+      log_truncate_on_rotation: "false"
+      logging_collector: "on"
+      max_parallel_workers: "32"
+      max_replication_slots: "32"
+      max_worker_processes: "32"
+      shared_buffers: 256MB
+      shared_memory_type: mmap
+      shared_preload_libraries: ""
+      ssl_max_protocol_version: TLSv1.3
+      ssl_min_protocol_version: TLSv1.3
+      wal_keep_size: 512MB
+      wal_level: logical
+      wal_log_hints: "on"
+      wal_receiver_timeout: 5s
+      wal_sender_timeout: 5s
+    syncReplicaElectionConstraint:
+      enabled: false
+  primaryUpdateMethod: restart
+  primaryUpdateStrategy: unsupervised
+  replicationSlots:
+    highAvailability:
+      enabled: true
+      slotPrefix: _cnpg_
+    synchronizeReplicas:
+      enabled: true
+    updateInterval: 30
+  resources: {}
+  smartShutdownTimeout: 180
+  startDelay: 300
+  stopDelay: 300
+  storage:
+    resizeInUseVolumes: true
+    size: 8Gi
+    storageClass: longhorn
+  superuserSecret:
+    name: keycloak-cnpg-superuser-secret
+  switchoverDelay: 3600
+status:
+  availableArchitectures:
+  - goArch: amd64
+    hash: f20cbc18bb03eafc1b02c90a8872b8e7a199e63196e6ce546029ea2a503bb883
+  - goArch: arm64
+    hash: e28f9109055832cc1fa1ece7866547f267b43e16c800d7b4335cab24ad5420d4
+  certificates:
+    clientCASecret: keycloak-cnpg-cluster-ca
+    expirations:
+      keycloak-cnpg-cluster-ca: 2025-06-02 15:07:46 +0000 UTC
+      keycloak-cnpg-cluster-replication: 2025-06-02 15:07:46 +0000 UTC
+      keycloak-cnpg-cluster-server: 2025-06-02 15:07:46 +0000 UTC
+    replicationTLSSecret: keycloak-cnpg-cluster-replication
+    serverAltDNSNames:
+    - keycloak-cnpg-cluster-rw
+    - keycloak-cnpg-cluster-rw.emcp-prod
+    - keycloak-cnpg-cluster-rw.emcp-prod.svc
+    - keycloak-cnpg-cluster-rw.emcp-prod.svc.cluster.local
+    - keycloak-cnpg-cluster-r
+    - keycloak-cnpg-cluster-r.emcp-prod
+    - keycloak-cnpg-cluster-r.emcp-prod.svc
+    - keycloak-cnpg-cluster-r.emcp-prod.svc.cluster.local
+    - keycloak-cnpg-cluster-ro
+    - keycloak-cnpg-cluster-ro.emcp-prod
+    - keycloak-cnpg-cluster-ro.emcp-prod.svc
+    - keycloak-cnpg-cluster-ro.emcp-prod.svc.cluster.local
+    serverCASecret: keycloak-cnpg-cluster-ca
+    serverTLSSecret: keycloak-cnpg-cluster-server
+  cloudNativePGCommitHash: 5fe5bb6b
+  cloudNativePGOperatorHash: f20cbc18bb03eafc1b02c90a8872b8e7a199e63196e6ce546029ea2a503bb883
+  conditions:
+  - lastTransitionTime: "2025-04-28T10:04:54Z"
+    message: Cluster is Ready
+    reason: ClusterIsReady
+    status: "True"
+    type: Ready
+  - lastTransitionTime: "2025-04-02T10:16:48Z"
+    message: Continuous archiving is working
+    reason: ContinuousArchivingSuccess
+    status: "True"
+    type: ContinuousArchiving
+  - lastTransitionTime: "2025-05-20T00:18:18Z"
+    message: Backup was successful
+    reason: LastBackupSucceeded
+    status: "True"
+    type: LastBackupSucceeded
+  configMapResourceVersion:
+    metrics:
+      cnpg-default-monitoring: "653273842"
+  currentPrimary: keycloak-cnpg-cluster-1
+  currentPrimaryTimestamp: "2025-03-04T15:13:20.074338Z"
+  firstRecoverabilityPoint: "2025-04-20T00:00:05Z"
+  firstRecoverabilityPointByMethod:
+    barmanObjectStore: "2025-04-20T00:00:05Z"
+  healthyPVC:
+  - keycloak-cnpg-cluster-1
+  image: ghcr.io/cloudnative-pg/postgresql:17.2
+  instanceNames:
+  - keycloak-cnpg-cluster-1
+  instances: 1
+  instancesReportedState:
+    keycloak-cnpg-cluster-1:
+      isPrimary: true
+      timeLineID: 1
+  instancesStatus:
+    healthy:
+    - keycloak-cnpg-cluster-1
+  lastSuccessfulBackup: "2025-05-20T00:18:10Z"
+  lastSuccessfulBackupByMethod:
+    barmanObjectStore: "2025-05-20T00:18:10Z"
+  latestGeneratedNode: 1
+  managedRolesStatus: {}
+  phase: Cluster in healthy state
+  poolerIntegrations:
+    pgBouncerIntegration: {}
+  pvcCount: 1
+  readService: keycloak-cnpg-cluster-r
+  readyInstances: 1
+  secretsResourceVersion:
+    applicationSecretVersion: "653264929"
+    clientCaSecretVersion: "653273907"
+    replicationSecretVersion: "653273915"
+    serverCaSecretVersion: "653273907"
+    serverSecretVersion: "653273911"
+    superuserSecretVersion: "653265249"
+  switchReplicaClusterStatus: {}
+  targetPrimary: keycloak-cnpg-cluster-1
+  targetPrimaryTimestamp: "2025-03-04T15:12:46.832808Z"
+  timelineID: 1
+  topology:
+    instances:
+      keycloak-cnpg-cluster-1: {}
+    nodesUsed: 1
+    successfullyExtracted: true
+  writeService: keycloak-cnpg-cluster-rw
