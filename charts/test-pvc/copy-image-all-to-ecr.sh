@@ -5,8 +5,8 @@ set -e  # Exit on error
 
 # Configuration variables
 HARBOR_REGISTRY="harbor.enclaive.cloud"
-HARBOR_REPO="emcp/admin"
-HARBOR_TAG="dev"  # Use the simple tag that exists
+HARBOR_REPO="vhsm/admin"
+HARBOR_TAG="latest"  # Use the simple tag that exists
 HARBOR_USERNAME="itzhak"  # Replace with your actual Harbor username
 HARBOR_PASSWORD='cksdl)(Kcjdksdf=98sd8"njkds)'
 AWS_REGION="eu-central-1"
@@ -14,7 +14,7 @@ AWS_ACCOUNT_ID="886093416603"
 
 # Services to migrate (add or remove as needed)
 declare -a SERVICES=(
-  "emcp/kc-provider"
+  "vhsm/vhsm:latest"
 )
 
 echo "===== COPYING IMAGES FROM HARBOR TO ECR ====="
@@ -41,6 +41,7 @@ for SERVICE in "${SERVICES[@]}"; do
   
   # Full image references
   HARBOR_IMAGE="${HARBOR_REGISTRY}/${REPO}:${TAG}"
+  echo "HARBOR_IMAGE: ${HARBOR_IMAGE}"
   ECR_REPO="${REPO_NAME}"
   ECR_IMAGE="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:${TAG}"
   

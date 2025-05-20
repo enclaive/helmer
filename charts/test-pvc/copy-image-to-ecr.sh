@@ -5,14 +5,14 @@ set -e  # Exit on error
 
 # Configuration variables
 HARBOR_REGISTRY="harbor.enclaive.cloud"
-HARBOR_REPO="emcp/admin"
-HARBOR_TAG="dev"  # Use the simple tag that exists
+HARBOR_REPO="vhsm/vhsm"
+HARBOR_TAG="0.28.6"  # Use the simple tag that exists
 HARBOR_USERNAME="itzhak"  # Replace with your actual Harbor username
 HARBOR_PASSWORD='cksdl)(Kcjdksdf=98sd8"njkds)'
 
 AWS_REGION="eu-central-1"  # Replace with your AWS region
 AWS_ACCOUNT_ID="886093416603"  # Replace with your AWS account ID
-ECR_REPO="emcp"  # The name of your ECR repository
+ECR_REPO="vhsm"  # The name of your ECR repository
 
 # Full image references
 HARBOR_IMAGE="${HARBOR_REGISTRY}/${HARBOR_REPO}:${HARBOR_TAG}"
