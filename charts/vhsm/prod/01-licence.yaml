@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vhsm-licence
+  namespace: vhsm-prod
+stringData:
+  ENCLAIVE_LICENCE: ref+sops://secrets.yaml?format=yaml#/vhsmLicence
