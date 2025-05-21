@@ -30,9 +30,14 @@ redis:
 
 persistence:
   enabled: true
-  storageClass: "openebs-hostpath"
+  storageClass: "gp2"
   size: "512Mi"
   accessMode: "ReadWriteOnce"  # This was missing - explicit accessMode
+
+tolerations:
+- key: "CriticalAddonsOnly"
+  operator: "Exists"
+  effect: "NoSchedule"
 
 probes:
   liveness:

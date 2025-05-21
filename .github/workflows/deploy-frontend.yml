@@ -111,7 +111,7 @@ jobs:
             --set environment=${{ inputs.environment }}
             --set logging.level=${{ steps.log-settings.outputs.log_level }}
             --set logging.format=${{ steps.log-settings.outputs.log_format }}
-            --set ingress.enabled=false
+            --set ingress.enabled=true
           timeout: 10m
       
       - name: Report Frontend deployment status

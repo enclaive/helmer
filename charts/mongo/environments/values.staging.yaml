@@ -18,9 +18,14 @@ resources:
 # Use OpenEBS for storage like Redis
 persistence:
   enabled: true
-  storageClass: "openebs-hostpath"
+  storageClass: "gp2"
   size: "1Gi"
   accessMode: "ReadWriteOnce"
+
+tolerations:
+- key: "CriticalAddonsOnly"
+  operator: "Exists"
+  effect: "NoSchedule"
 
 # MongoDB configuration
 mongodb:

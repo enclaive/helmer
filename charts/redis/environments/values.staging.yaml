@@ -29,9 +29,14 @@ resources:
 # Persistence config for dev
 persistence:
   enabled: true
-  storageClass: "openebs-hostpath"
+  storageClass: "gp2"
   accessMode: ReadWriteOnce
   size: 1Gi
+
+tolerations:
+- key: "CriticalAddonsOnly"
+  operator: "Exists"
+  effect: "NoSchedule"
 
 # Service configuration
 service:

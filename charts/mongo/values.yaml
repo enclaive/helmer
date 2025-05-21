@@ -47,7 +47,7 @@ affinity: {}
 
 persistence:
   enabled: true
-  storageClass: "openebs-hostpath"
+  storageClass: "gp2"
   size: "5Gi"  # Increased from 1Gi to 5Gi for better performance
   accessMode: "ReadWriteOnce"
 
@@ -61,7 +61,7 @@ backup:
   # Database to backup
   database: backend_db
   # Storage for backups
-  storageClass: "openebs-hostpath"
+  storageClass: "gp2"
   storageSize: "10Gi"
 
 # Health check probes

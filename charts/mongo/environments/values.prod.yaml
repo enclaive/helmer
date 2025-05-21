@@ -21,7 +21,7 @@ persistence:
   enabled: true
   # Use a StorageClass with better durability if available in your cluster
   # For AWS EKS, consider "gp3" or "io1" for better performance
-  storageClass: "openebs-hostpath"  
+  storageClass: "gp2"  
   size: "20Gi"     # 20GB for production data
   accessMode: "ReadWriteOnce"
 
@@ -37,8 +37,13 @@ backup:
   schedule: "0 */6 * * *"  # Every 6 hours
   retentionCount: 14      # Keep last 14 backups
   database: backend_db
-  storageClass: "openebs-hostpath"
+  storageClass: "gp2"
   storageSize: "40Gi"    # More space for production backups
+
+tolerations:
+- key: "CriticalAddonsOnly"
+  operator: "Exists"
+  effect: "NoSchedule"
 
 # Health check probes - more tolerant for production workloads
 probes:
