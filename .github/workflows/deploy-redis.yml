@@ -41,6 +41,27 @@ jobs:
           eks-cluster: ${{ env.EKS_CLUSTER_NAME }}
           namespace: ${{ inputs.namespace }}
       
+      - name: Create EBS CSI Storage Class
+        run: |
+          # Create GP3 CSI storage class if it doesn't exist
+          cat <<EOF | kubectl apply -f -
+          apiVersion: storage.k8s.io/v1
+          kind: StorageClass
+          metadata:
+            name: gp3-csi
+            annotations:
+              storageclass.kubernetes.io/is-default-class: "true"
+          provisioner: ebs.csi.aws.com
+          parameters:
+            type: gp3
+            fsType: ext4
+          reclaimPolicy: Delete
+          volumeBindingMode: WaitForFirstConsumer
+          allowVolumeExpansion: true
+          EOF
+          
+          echo "Created/updated gp3-csi storage class"
+      
       - name: Deploy Redis
         uses: ./.github/actions/deploy-helm-chart
         with:
@@ -51,6 +72,8 @@ jobs:
           environment: ${{ inputs.environment }}
           image-repository: redis
           image-tag: 6.2-alpine
+          # Ensure we use the EBS CSI storage class
+          additional-set-values: --set persistence.storageClass="gp3-csi"
           timeout: 10m
       
       - name: Report Redis deployment status
@@ -59,7 +82,10 @@ jobs:
           NAMESPACE="${{ inputs.namespace }}"
           
           echo "=== Redis Deployment Status for ${{ inputs.environment }} ==="
-          kubectl get statefulset redis -n $NAMESPACE
-          kubectl get pods -n $NAMESPACE -l app=redis
-          kubectl get service redis -n $NAMESPACE
-          kubectl get pvc -n $NAMESPACE -l app=redis
+          kubectl get statefulset redis -n $NAMESPACE || echo "StatefulSet not found"
+          kubectl get pods -n $NAMESPACE -l app=redis || echo "No Redis pods found"
+          kubectl get service redis -n $NAMESPACE || echo "Service not found"
+          kubectl get pvc -n $NAMESPACE -l app=redis || echo "No PVCs found"
+          
+          echo "=== Storage Class Information ==="
+          kubectl get storageclass gp3-csi || echo "Storage class not found"
