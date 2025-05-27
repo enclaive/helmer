@@ -30,15 +30,13 @@ redis:
 
 persistence:
   enabled: true
-  # Use EBS CSI driver with GP3 for better performance
+  # Use gp3-csi-immediate to avoid topology issues
   storageClass: "gp3-csi-immediate"
   size: "512Mi"
   accessMode: "ReadWriteOnce"
 
-tolerations:
-- key: "CriticalAddonsOnly"
-  operator: "Exists"
-  effect: "NoSchedule"
+# Remove CriticalAddonsOnly toleration to avoid scheduling issues
+tolerations: []
 
 probes:
   liveness:
@@ -51,3 +49,14 @@ probes:
     periodSeconds: 10
     timeoutSeconds: 5
     failureThreshold: 3
+
+# Add node selector and affinity for better scheduling
+nodeSelector: {}
+affinity: {}
+
+# Security context
+podSecurityContext: {}
+securityContext: {}
+
+# Additional pod annotations
+podAnnotations: {}
