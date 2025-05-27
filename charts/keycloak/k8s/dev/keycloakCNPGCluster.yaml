@@ -2,7 +2,7 @@ apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
   name: keycloak-cnpg-cluster
-  namespace: emcp-dev
+  namespace: emcp-deve
 spec:
   description: "CloudNativePG for Keycloak"
   imageName: ghcr.io/cloudnative-pg/postgresql:17.2

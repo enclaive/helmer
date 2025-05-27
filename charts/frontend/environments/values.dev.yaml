@@ -1,5 +1,5 @@
 # Updated values.dev.yaml
-namespace: emcp-dev
+namespace: emcp-deve
 domain: dev.enclaive.cloud
 replicaCount: 1
 
@@ -30,7 +30,7 @@ resources:
 
 # API endpoints for development
 api:
-  url: "https://emcp-dev.enclaive.cloud"
+  url: "https://emcp-deve.enclaive.cloud"
 auth:
   url: "https://auth-dev.enclaive.cloud" 
 app:

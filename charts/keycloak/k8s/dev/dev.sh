@@ -9,4 +9,4 @@ docker push harbor.enclaive.cloud/emcp/kc-provider:dev
 
 sed "s;  tag: .*;  tag: $REF;" -i keycloakValuesOverride.dev.yaml
 
-helm upgrade --install --namespace emcp-dev emcp-dev-keycloak oci://registry-1.docker.io/bitnamicharts/keycloak --version 24.4.6 -f keycloakValuesOverride.dev.yaml
+helm upgrade --install --namespace emcp-deve emcp-deve-keycloak oci://registry-1.docker.io/bitnamicharts/keycloak --version 24.4.6 -f keycloakValuesOverride.dev.yaml

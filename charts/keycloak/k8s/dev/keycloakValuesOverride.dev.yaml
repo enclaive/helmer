@@ -28,7 +28,7 @@ extraStartupArgs: "--spi-email-template-provider=custom-freemarker"
 postgresql:
   enabled: false
 externalDatabase:
-  host: keycloak-cnpg-cluster-rw.emcp-dev.svc.cluster.local
+  host: keycloak-cnpg-cluster-rw.emcp-deve.svc.cluster.local
   port: 5432
   user: bn_keycloak
   database: bitnami_keycloak
@@ -42,7 +42,7 @@ affinity:
     requiredDuringSchedulingIgnoredDuringExecution:
       - labelSelector:
           matchLabels:
-            app.kubernetes.io/instance: emcp-dev-keycloak
+            app.kubernetes.io/instance: emcp-deve-keycloak
             app.kubernetes.io/name: keycloak
         topologyKey: kubernetes.io/hostname
 

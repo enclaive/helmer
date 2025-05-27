@@ -60,7 +60,7 @@ kubectl wait --for=condition=ready pod -l app=ebs-csi-controller -n kube-system 
 kubectl wait --for=condition=ready pod -l app=ebs-csi-node -n kube-system --timeout=60s
 
 echo -e "\n8. Clean up the stuck VHSM resources..."
-NAMESPACE="emcp-dev"
+NAMESPACE="emcp-deve"
 
 # Force delete stuck resources
 kubectl delete pod vhsm-0 vhsm-1 vhsm-2 -n $NAMESPACE --force --grace-period=0 2>/dev/null || true
