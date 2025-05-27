@@ -14,7 +14,7 @@ echo -e "\n${GREEN}========== MongoDB Deployment Validation Script ==========${N
 
 # Variables - modify as needed
 CHART_PATH="./charts/mongo"
-NAMESPACE="emcp-deve"  # Default namespace, can be overridden with -n flag
+NAMESPACE="emcp-dev"  # Default namespace, can be overridden with -n flag
 VALUES_FILE=""
 
 # Process command line arguments

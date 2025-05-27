@@ -4,7 +4,7 @@
 source "$(dirname "$0")/common.sh"
 
 echo "=== Deploying to DEVELOPMENT Environment ==="
-NAMESPACE="emcp-deve"
+NAMESPACE="emcp-dev"
 
 # Ensure namespace exists
 ensure_namespace "$NAMESPACE"

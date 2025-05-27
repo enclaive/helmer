@@ -1,7 +1,7 @@
 releases:
 
 - name: vhsm
-  namespace: emcp-deve
+  namespace: emcp-dev
   chart: oci://harbor.enclaive.cloud/vhsm/vhsm
   version: 0.28.4
   values:
@@ -37,11 +37,11 @@ releases:
           ingressClassName: public
 
           hosts:
-            - host: emcp-deve.enclaive.cloud
+            - host: emcp-dev.enclaive.cloud
 
           tls:
             - hosts:
-                - emcp-deve.enclaive.cloud
+                - emcp-dev.enclaive.cloud
               secretName: vhsm-dev-ingress-tls
         
         ha:

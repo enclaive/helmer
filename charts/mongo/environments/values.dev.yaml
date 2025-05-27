@@ -1,4 +1,4 @@
-namespace: emcp-deve
+namespace: emcp-dev
 replicaCount: 1
 
 image:
