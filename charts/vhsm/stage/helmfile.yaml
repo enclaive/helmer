@@ -70,17 +70,4 @@ releases:
     - injector:
         enabled: false
 
-    - serverTelemetry:
-        serviceMonitor:
-          enabled: true
-          interval: 30s
-          scrapeTimeout: 10s
-          labels:
-            release: prometheus
-          authorization:
-            credentials:
-              name: vhsm-staging-metrics-token
-              key: token
-        prometheusRules:
-          enabled: false
 

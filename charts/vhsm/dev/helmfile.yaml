@@ -1,7 +1,7 @@
 releases:
 
 - name: vhsm
-  namespace: vhsm-dev
+  namespace: emcp-dev
   chart: oci://harbor.enclaive.cloud/vhsm/vhsm
   version: 0.28.4
   values:
@@ -37,11 +37,11 @@ releases:
           ingressClassName: public
 
           hosts:
-            - host: vhsm-dev.enclaive.cloud
+            - host: emcp-dev.enclaive.cloud
 
           tls:
             - hosts:
-                - vhsm-dev.enclaive.cloud
+                - emcp-dev.enclaive.cloud
               secretName: vhsm-dev-ingress-tls
         
         ha:
@@ -75,17 +75,3 @@ releases:
 
     - injector:
         enabled: false
-
-    - serverTelemetry:
-        serviceMonitor:
-          enabled: true
-          interval: 30s
-          scrapeTimeout: 10s
-          labels:
-            release: prometheus
-          authorization:
-            credentials:
-              name: vhsm-dev-metrics-token
-              key: token
-        prometheusRules:
-          enabled: false
