@@ -85,13 +85,16 @@ jobs:
           
           echo "Using image: $ECR_IMAGE"
       
-      - name: Install Helmfile
+      - name: Install Helmfile and required plugins
         run: |
           # Install Helmfile
           wget https://github.com/helmfile/helmfile/releases/download/v0.158.0/helmfile_0.158.0_linux_amd64.tar.gz
           tar -xzf helmfile_0.158.0_linux_amd64.tar.gz
           sudo mv helmfile /usr/local/bin/
           chmod +x /usr/local/bin/helmfile
+          
+          # Install helm-diff plugin (required for helmfile)
+          helm plugin install https://github.com/databus23/helm-diff
           
           # Add Helm repos
           helm repo add hashicorp https://helm.releases.hashicorp.com
@@ -104,8 +107,8 @@ jobs:
           export VHSM_IMAGE_REPOSITORY="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/vhsm"
           export VHSM_IMAGE_TAG="${{ steps.set-tag.outputs.vhsm_tag }}"
           
-          # Deploy using helmfile
-          helmfile apply --set server.image.repository=$VHSM_IMAGE_REPOSITORY --set server.image.tag=$VHSM_IMAGE_TAG
+          # Use sync instead of apply to avoid diff issues, or use --skip-diff-on-install
+          helmfile sync --set server.image.repository=$VHSM_IMAGE_REPOSITORY --set server.image.tag=$VHSM_IMAGE_TAG
       
       - name: Wait for VHSM deployment
         run: |
