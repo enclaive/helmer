@@ -1,7 +1,7 @@
 releases:
 
 - name: vhsm
-  namespace: vhsm-staging
+  namespace: emcp-staging
   chart: oci://harbor.enclaive.cloud/vhsm/vhsm
   version: 0.28.4
   values:
@@ -16,7 +16,7 @@ releases:
         updateStrategyType: RollingUpdate
 
         dataStorage:
-          storageClass: lv
+          storageClass: gp3-csi-immediate
 
         extraSecretEnvironmentVars:
           - envName: ENCLAIVE_LICENCE
