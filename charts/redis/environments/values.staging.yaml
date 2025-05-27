@@ -29,7 +29,7 @@ resources:
 # Persistence config for dev
 persistence:
   enabled: true
-  storageClass: "gp2"
+  storageClass: "gp3"
   accessMode: ReadWriteOnce
   size: 1Gi
 

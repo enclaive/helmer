@@ -43,12 +43,12 @@ jobs:
       
       - name: Create EBS CSI Storage Classes
         run: |
-          # Create gp3-csi-immediate storage class to avoid topology issues
+          # Create gp3-immediate storage class to avoid topology issues
           cat <<EOF | kubectl apply -f -
           apiVersion: storage.k8s.io/v1
           kind: StorageClass
           metadata:
-            name: gp3-csi-immediate
+            name: gp3-immediate
             annotations:
               storageclass.kubernetes.io/is-default-class: "false"
           provisioner: ebs.csi.aws.com
@@ -67,12 +67,12 @@ jobs:
               - eu-central-1c
           EOF
           
-          # Keep the original gp3-csi storage class as well
+          # Keep the original gp3 storage class as well
           cat <<EOF | kubectl apply -f -
           apiVersion: storage.k8s.io/v1
           kind: StorageClass
           metadata:
-            name: gp3-csi
+            name: gp3
             annotations:
               storageclass.kubernetes.io/is-default-class: "true"
           provisioner: ebs.csi.aws.com
@@ -97,7 +97,7 @@ jobs:
           image-repository: redis
           image-tag: 6.2-alpine
           # Use the immediate binding storage class
-          additional-set-values: --set persistence.storageClass="gp3-csi-immediate"
+          additional-set-values: --set persistence.storageClass="gp3-immediate"
           timeout: 10m
       
       - name: Report Redis deployment status
@@ -112,5 +112,5 @@ jobs:
           kubectl get pvc -n $NAMESPACE -l app=redis || echo "No PVCs found"
           
           echo "=== Storage Class Information ==="
-          kubectl get storageclass gp3-csi-immediate || echo "Immediate storage class not found"
-          kubectl get storageclass gp3-csi || echo "WaitForFirstConsumer storage class not found"
+          kubectl get storageclass gp3-immediate || echo "Immediate storage class not found"
+          kubectl get storageclass gp3 || echo "WaitForFirstConsumer storage class not found"

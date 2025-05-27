@@ -21,7 +21,7 @@ releases:
 
         dataStorage:
           # Use EBS CSI storage class for EKS
-          storageClass: gp3-csi
+          storageClass: gp3
 
         extraSecretEnvironmentVars:
           - envName: ENCLAIVE_LICENCE

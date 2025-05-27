@@ -16,7 +16,7 @@ releases:
         updateStrategyType: RollingUpdate
 
         dataStorage:
-          storageClass: gp3-csi-immediate
+          storageClass: gp3-immediate
 
         extraSecretEnvironmentVars:
           - envName: ENCLAIVE_LICENCE

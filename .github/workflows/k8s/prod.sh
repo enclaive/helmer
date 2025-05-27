@@ -34,7 +34,7 @@ helm upgrade --install redis ./charts/redis \
   --set redis.config.appendonly="yes" \
   --set redis.config.appendfsync="everysec" \
   --set persistence.enabled=true \
-  --set persistence.storageClass="gp2" \
+  --set persistence.storageClass="gp3" \
   --set persistence.size="1Gi" \
   --timeout 15m \
   --wait

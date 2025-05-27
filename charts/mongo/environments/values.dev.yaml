@@ -18,7 +18,7 @@ resources:
 # Use OpenEBS for storage like Redis
 persistence:
   enabled: true
-  storageClass: "gp2"
+  storageClass: "gp3"
   size: "1Gi"
   accessMode: "ReadWriteOnce"
 
