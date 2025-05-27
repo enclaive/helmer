@@ -3,9 +3,9 @@
 echo "=== Proper Storage Diagnosis for EKS ==="
 
 # Your storage classes are actually fine:
-# - gp2: Legacy AWS EBS provisioner (works but deprecated)
-# - gp3-csi: Modern EBS CSI with WaitForFirstConsumer (CORRECT)
-# - gp3-csi-immediate: EBS CSI with Immediate binding (can cause issues)
+# - gp3: Legacy AWS EBS provisioner (works but deprecated)
+# - gp3: Modern EBS CSI with WaitForFirstConsumer (CORRECT)
+# - gp3-immediate: EBS CSI with Immediate binding (can cause issues)
 
 echo "1. Let's check the REAL issue - CSI Node topology labels..."
 kubectl describe csinodes
@@ -67,7 +67,7 @@ kubectl delete pod vhsm-0 vhsm-1 vhsm-2 -n $NAMESPACE --force --grace-period=0 2
 kubectl delete statefulset vhsm -n $NAMESPACE 2>/dev/null || true
 kubectl delete pvc data-vhsm-0 data-vhsm-1 data-vhsm-2 -n $NAMESPACE 2>/dev/null || true
 
-echo -e "\n9. Test storage with a simple PVC using your existing gp3-csi..."
+echo -e "\n9. Test storage with a simple PVC using your existing gp3..."
 cat <<EOF | kubectl apply -f -
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -77,7 +77,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: gp3-csi
+  storageClassName: gp3
   resources:
     requests:
       storage: 1Gi
@@ -96,7 +96,7 @@ echo -e "\nCheck CSI nodes:"
 kubectl get csinodes
 
 echo -e "\nIf test PVC is now 'Bound', the issue is fixed!"
-echo "You can then redeploy VHSM using storageClassName: gp3-csi"
+echo "You can then redeploy VHSM using storageClassName: gp3"
 
 echo -e "\nClean up test PVC when done:"
 echo "kubectl delete pvc test-storage -n $NAMESPACE"

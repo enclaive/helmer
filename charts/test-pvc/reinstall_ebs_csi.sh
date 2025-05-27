@@ -63,8 +63,8 @@ kubectl get csidriver ebs.csi.aws.com
 # Step 9: Create storage class
 echo -e "\n9. Creating storage class..."
 
-# Remove default from old gp2
-kubectl annotate storageclass gp2 storageclass.kubernetes.io/is-default-class- 2>/dev/null || true
+# Remove default from old gp3
+kubectl annotate storageclass gp3 storageclass.kubernetes.io/is-default-class- 2>/dev/null || true
 
 # Create GP3 storage class (default)
 cat <<EOF | kubectl apply -f -
