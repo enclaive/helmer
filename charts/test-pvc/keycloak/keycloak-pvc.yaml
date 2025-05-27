@@ -13,11 +13,11 @@ items:
     - kubernetes.io/pvc-protection
     labels:
       app.kubernetes.io/component: primary
-      app.kubernetes.io/instance: emcp-deve-keycloak
+      app.kubernetes.io/instance: emcp-dev-keycloak
       app.kubernetes.io/name: postgresql
       recurring-job-group.longhorn.io/default: enabled
-    name: data-emcp-deve-keycloak-postgresql-0
-    namespace: emcp-deve
+    name: data-emcp-dev-keycloak-postgresql-0
+    namespace: emcp-dev
     resourceVersion: "556404072"
     uid: fba5b182-f1d4-4a0f-aac2-e00bd8bb8412
   spec:

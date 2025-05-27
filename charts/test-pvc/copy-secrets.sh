@@ -3,8 +3,8 @@
 # Configuration
 SOURCE_CONTEXT="ucak"
 DEST_CONTEXT="arn:aws:eks:eu-central-1:886093416603:cluster/emcp-eks-cluster"
-SOURCE_NAMESPACE="emcp-deve"
-DEST_NAMESPACE="emcp-deve"
+SOURCE_NAMESPACE="emcp-dev"
+DEST_NAMESPACE="emcp-dev"
 
 # Script banner
 echo "========================================================"

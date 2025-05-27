@@ -136,5 +136,5 @@ rm -f trust-policy.json
 echo -e "\n✅ Installation complete!"
 echo "Version chosen by EKS: $INSTALLED_VERSION"
 echo -e "\nNow clean up VHSM and redeploy:"
-echo "kubectl delete pvc data-vhsm-0 data-vhsm-1 data-vhsm-2 -n emcp-deve --force"
-echo "kubectl delete statefulset vhsm -n emcp-deve"
+echo "kubectl delete pvc data-vhsm-0 data-vhsm-1 data-vhsm-2 -n emcp-dev --force"
+echo "kubectl delete statefulset vhsm -n emcp-dev"

@@ -2,7 +2,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: openebs-test-pvc
-  namespace: emcp-deve
+  namespace: emcp-dev
 spec:
   accessModes:
     - ReadWriteOnce

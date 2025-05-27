@@ -60,20 +60,20 @@ echo -e "\n7. Check CSINodes now have topology information:"
 kubectl get csinodes -o yaml | grep -A 10 topologyKeys
 
 echo -e "\n8. Clean up stuck PVCs to force reprovisioning..."
-kubectl delete pvc data-vhsm-0 data-vhsm-1 data-vhsm-2 test-storage -n emcp-deve --force
+kubectl delete pvc data-vhsm-0 data-vhsm-1 data-vhsm-2 test-storage -n emcp-dev --force
 
 echo -e "\n9. Delete stuck pods to trigger rescheduling..."
-kubectl delete pod vhsm-0 vhsm-1 vhsm-2 -n emcp-deve --force --grace-period=0
+kubectl delete pod vhsm-0 vhsm-1 vhsm-2 -n emcp-dev --force --grace-period=0
 
 echo -e "\n10. Check if StatefulSet recreates pods with working PVCs..."
 sleep 10
-kubectl get pods -n emcp-deve
-kubectl get pvc -n emcp-deve
+kubectl get pods -n emcp-dev
+kubectl get pvc -n emcp-dev
 
 echo -e "\n=== VERIFICATION ==="
 echo "Wait 2 minutes then check:"
-echo "kubectl get pvc -n emcp-deve"
-echo "kubectl describe pvc data-vhsm-0 -n emcp-deve"
+echo "kubectl get pvc -n emcp-dev"
+echo "kubectl describe pvc data-vhsm-0 -n emcp-dev"
 echo ""
 echo "If PVCs are still failing, try switching to gp3 storage class:"
-echo "kubectl patch statefulset vhsm -n emcp-deve -p '{\"spec\":{\"volumeClaimTemplates\":[{\"metadata\":{\"name\":\"data\"},\"spec\":{\"storageClassName\":\"gp3\"}}]}}'"
+echo "kubectl patch statefulset vhsm -n emcp-dev -p '{\"spec\":{\"volumeClaimTemplates\":[{\"metadata\":{\"name\":\"data\"},\"spec\":{\"storageClassName\":\"gp3\"}}]}}'"
