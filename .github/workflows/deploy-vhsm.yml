@@ -1,0 +1,152 @@
+name: Deploy VHSM Service
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      namespace:
+        required: true
+        type: string
+      skip_deployment:
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+      VHSM_LICENCE:
+        required: true
+
+jobs:
+  deploy-vhsm:
+    name: Deploy VHSM
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.skip_deployment }}
+    env:
+      AWS_REGION: eu-central-1
+      EKS_CLUSTER_NAME: emcp-eks-cluster
+      AWS_ACCOUNT_ID: 886093416603
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup EKS
+        uses: ./.github/actions/setup-eks
+        with:
+          aws-access-key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          eks-cluster: ${{ env.EKS_CLUSTER_NAME }}
+          namespace: ${{ inputs.namespace }}
+      
+      - name: Create ECR pull credentials
+        uses: ./.github/actions/create-ecr-credentials
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          aws-account-id: ${{ env.AWS_ACCOUNT_ID }}
+          namespace: ${{ inputs.namespace }}
+          secret-name: aws-ecr-creds
+      
+      - name: Create VHSM licence secret
+        run: |
+          kubectl create secret generic vhsm-licence \
+            --from-literal=ENCLAIVE_LICENCE="${{ secrets.VHSM_LICENCE }}" \
+            --namespace=${{ inputs.namespace }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+          
+          echo "Created VHSM licence secret"
+      
+      - name: Set VHSM image tag
+        id: set-tag
+        run: |
+          ENV="${{ inputs.environment }}"
+          
+          # Use simple tag names
+          if [ "$ENV" == "prod" ]; then
+            TAG="prod"
+          elif [ "$ENV" == "staging" ]; then
+            TAG="staging"
+          elif [ "$ENV" == "dev" ]; then
+            TAG="dev"
+          fi
+          
+          # Full ECR image path
+          ECR_IMAGE="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/vhsm:${TAG}"
+          
+          echo "vhsm_tag=$TAG" >> $GITHUB_OUTPUT
+          echo "vhsm_image=$ECR_IMAGE" >> $GITHUB_OUTPUT
+          echo "VHSM_TAG=$TAG" >> $GITHUB_ENV
+          echo "VHSM_IMAGE=$ECR_IMAGE" >> $GITHUB_ENV
+          
+          echo "Using image: $ECR_IMAGE"
+      
+      - name: Install Helmfile
+        run: |
+          # Install Helmfile
+          wget https://github.com/helmfile/helmfile/releases/download/v0.158.0/helmfile_0.158.0_linux_amd64.tar.gz
+          tar -xzf helmfile_0.158.0_linux_amd64.tar.gz
+          sudo mv helmfile /usr/local/bin/
+          chmod +x /usr/local/bin/helmfile
+          
+          # Add Helm repos
+          helm repo add hashicorp https://helm.releases.hashicorp.com
+          helm repo update
+      
+      - name: Deploy VHSM using Helmfile
+        working-directory: ./charts/vhsm/${{ inputs.environment }}
+        run: |
+          # Override image settings for ECR
+          export VHSM_IMAGE_REPOSITORY="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/vhsm"
+          export VHSM_IMAGE_TAG="${{ steps.set-tag.outputs.vhsm_tag }}"
+          
+          # Deploy using helmfile
+          helmfile apply --set server.image.repository=$VHSM_IMAGE_REPOSITORY --set server.image.tag=$VHSM_IMAGE_TAG
+      
+      - name: Wait for VHSM deployment
+        run: |
+          NAMESPACE="${{ inputs.namespace }}"
+          
+          echo "Waiting for VHSM StatefulSet to be ready..."
+          kubectl wait --for=condition=Ready statefulset/vhsm-server \
+            --namespace=$NAMESPACE \
+            --timeout=600s || echo "Timeout waiting for StatefulSet"
+          
+          echo "Waiting for VHSM pods to be ready..."
+          kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=vault \
+            --namespace=$NAMESPACE \
+            --timeout=600s || echo "Timeout waiting for pods"
+      
+      - name: Report VHSM deployment status
+        if: always()
+        run: |
+          NAMESPACE="${{ inputs.namespace }}"
+          
+          echo "=== VHSM Deployment Status for ${{ inputs.environment }} ==="
+          
+          echo "=== StatefulSets ==="
+          kubectl get statefulset -n $NAMESPACE || echo "No StatefulSets found"
+          
+          echo "=== Pod Status ==="
+          kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=vault || echo "No VHSM pods found"
+          
+          echo "=== Services ==="
+          kubectl get services -n $NAMESPACE || echo "No services found"
+          
+          echo "=== Ingress ==="
+          kubectl get ingress -n $NAMESPACE || echo "No ingress found"
+          
+          echo "=== Pod Details ==="
+          VHSM_PODS=$(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=vault -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$VHSM_PODS" ]; then
+            for pod in $VHSM_PODS; do
+              echo "Describing pod: $pod"
+              kubectl describe pod $pod -n $NAMESPACE
+            done
+          else
+            echo "No VHSM pods found for detailed inspection"
+          fi

@@ -9,14 +9,19 @@ releases:
 
     - server:
         image:
-          repository: harbor.enclaive.cloud/vhsm/vhsm
-          tag: gh-run-14196053180-1-110
+          repository: 886093416603.dkr.ecr.eu-central-1.amazonaws.com/vhsm
+          tag: dev
           pullPolicy: Always
+
+        # Add ECR image pull secrets
+        imagePullSecrets:
+          - name: aws-ecr-creds
 
         updateStrategyType: RollingUpdate
 
         dataStorage:
-          storageClass: lv
+          # Use EBS CSI storage class for EKS
+          storageClass: gp3-csi
 
         extraSecretEnvironmentVars:
           - envName: ENCLAIVE_LICENCE
@@ -32,12 +37,13 @@ releases:
           ingressClassName: public
 
           hosts:
-            - host: vhsm-staging.enclaive.cloud
+            - host: vhsm-dev.enclaive.cloud
 
           tls:
             - hosts:
-                - vhsm-staging.enclaive.cloud
-              secretName: vault-ingress-tls
+                - vhsm-dev.enclaive.cloud
+              secretName: vhsm-dev-ingress-tls
+        
         ha:
           enabled: true
 
@@ -79,8 +85,7 @@ releases:
             release: prometheus
           authorization:
             credentials:
-              name: vhsm-staging-metrics-token
+              name: vhsm-dev-metrics-token
               key: token
         prometheusRules:
           enabled: false
-

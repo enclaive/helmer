@@ -21,6 +21,7 @@ on:
       - 'charts/redis/values.yaml'
       - 'charts/redis/environments/*.yaml'
       - 'charts/mongo/**'
+      - 'charts/vhsm/**'
       - '.github/workflows/**'
   workflow_dispatch:
     inputs:
@@ -58,6 +59,11 @@ on:
         required: false
         default: false
         type: boolean
+      deploy_vhsm:
+        description: 'Deploy VHSM service'
+        required: false
+        default: false
+        type: boolean
       check_redis_only:
         description: 'Only check if Redis exists without redeploying'
         required: false
@@ -71,6 +77,7 @@ jobs:
     outputs:
       environment: ${{ steps.set-env.outputs.environment }}
       namespace: ${{ steps.set-env.outputs.namespace }}
+      vhsm_namespace: ${{ steps.set-env.outputs.vhsm_namespace }}
     
     steps:
       - name: Set environment based on branch or input
@@ -96,9 +103,11 @@ jobs:
           # Set environment and namespace
           echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
           echo "namespace=emcp-$ENVIRONMENT" >> $GITHUB_OUTPUT
+          echo "vhsm_namespace=vhsm-$ENVIRONMENT" >> $GITHUB_OUTPUT
           
           echo "Selected environment: $ENVIRONMENT"
           echo "Using namespace: emcp-$ENVIRONMENT"
+          echo "Using VHSM namespace: vhsm-$ENVIRONMENT"
 
   check-changes:
     name: Check for Changes
@@ -109,6 +118,7 @@ jobs:
       frontend_changed: ${{ steps.check-folders.outputs.frontend_changed }}
       redis_changed: ${{ steps.check-folders.outputs.redis_changed }}
       mongodb_changed: ${{ steps.check-folders.outputs.mongodb_changed }}
+      vhsm_changed: ${{ steps.check-folders.outputs.vhsm_changed }}
       workflow_changed: ${{ steps.check-folders.outputs.workflow_changed }}
     
     steps:
@@ -129,6 +139,7 @@ jobs:
               echo "frontend_changed=false" >> $GITHUB_OUTPUT
               echo "redis_changed=false" >> $GITHUB_OUTPUT
               echo "mongodb_changed=false" >> $GITHUB_OUTPUT
+              echo "vhsm_changed=false" >> $GITHUB_OUTPUT
               echo "workflow_changed=true" >> $GITHUB_OUTPUT
             else
               echo "admin_changed=${{ github.event.inputs.deploy_admin }}" >> $GITHUB_OUTPUT
@@ -136,6 +147,7 @@ jobs:
               echo "frontend_changed=${{ github.event.inputs.deploy_frontend }}" >> $GITHUB_OUTPUT
               echo "redis_changed=${{ github.event.inputs.deploy_redis }}" >> $GITHUB_OUTPUT
               echo "mongodb_changed=${{ github.event.inputs.deploy_mongodb }}" >> $GITHUB_OUTPUT
+              echo "vhsm_changed=${{ github.event.inputs.deploy_vhsm }}" >> $GITHUB_OUTPUT
               echo "workflow_changed=true" >> $GITHUB_OUTPUT
             fi
             exit 0
@@ -154,75 +166,54 @@ jobs:
           FRONTEND_CHANGED="false"
           REDIS_CHANGED="false"
           MONGODB_CHANGED="false"
+          VHSM_CHANGED="false"
           WORKFLOW_CHANGED="false"
           
           # Check if specific folders were modified with precise targeting
           if echo "$CHANGED_FILES" | grep -q "^charts/admin/"; then
-            # Look for relevant changes in admin
             if echo "$CHANGED_FILES" | grep -E -q "^charts/admin/(templates|values\.yaml|Chart\.yaml|environments/values\.[^/]+\.yaml)"; then
               echo "Admin service files changed"
               ADMIN_CHANGED="true"
-            else
-              echo "Changes in admin directory don't affect deployment"
             fi
-          else
-            echo "No changes in admin service"
           fi
           
           if echo "$CHANGED_FILES" | grep -q "^charts/backend/"; then
-            # Look for relevant changes in backend
             if echo "$CHANGED_FILES" | grep -E -q "^charts/backend/(templates|values\.yaml|Chart\.yaml|environments/values\.[^/]+\.yaml)"; then
               echo "Backend service files changed"
               BACKEND_CHANGED="true"
-            else
-              echo "Changes in backend directory don't affect deployment"
             fi
-          else
-            echo "No changes in backend service"
           fi
           
           if echo "$CHANGED_FILES" | grep -q "^charts/frontend/"; then
-            # Look for relevant changes in frontend
             if echo "$CHANGED_FILES" | grep -E -q "^charts/frontend/(templates|values\.yaml|Chart\.yaml|environments/values\.[^/]+\.yaml)"; then
               echo "Frontend service files changed"
               FRONTEND_CHANGED="true"
-            else
-              echo "Changes in frontend directory don't affect deployment"
             fi
-          else
-            echo "No changes in frontend service"
           fi
           
           if echo "$CHANGED_FILES" | grep -q "^charts/redis/"; then
-            # Look for relevant changes in redis
             if echo "$CHANGED_FILES" | grep -E -q "^charts/redis/(templates|values\.yaml|Chart\.yaml|environments/values\.[^/]+\.yaml)"; then
               echo "Redis service files changed"
               REDIS_CHANGED="true"
-            else
-              echo "Changes in redis directory don't affect deployment"
             fi
-          else
-            echo "No changes in redis service"
           fi
           
           if echo "$CHANGED_FILES" | grep -q "^charts/mongo/"; then
-            # Look for relevant changes in mongodb
             if echo "$CHANGED_FILES" | grep -E -q "^charts/mongo/(templates|values\.yaml|Chart\.yaml|environments/values\.[^/]+\.yaml)"; then
               echo "MongoDB service files changed"
               MONGODB_CHANGED="true"
-            else
-              echo "Changes in mongodb directory don't affect deployment"
             fi
-          else
-            echo "No changes in mongodb service"
           fi
           
-          # Check if workflow files changed - be more selective
-          if echo "$CHANGED_FILES" | grep -E -q "^\.github/workflows/(deploy-emcp\.yml|deploy-mongodb\.yml|k8s/(common|dev|staging|prod)\.sh)"; then
+          if echo "$CHANGED_FILES" | grep -q "^charts/vhsm/"; then
+            echo "VHSM service files changed"
+            VHSM_CHANGED="true"
+          fi
+          
+          # Check if workflow files changed
+          if echo "$CHANGED_FILES" | grep -E -q "^\.github/workflows/(deploy-emcp\.yml|deploy-mongodb\.yml|deploy-vhsm\.yml|k8s/(common|dev|staging|prod)\.sh)"; then
             echo "Deployment workflow files changed"
             WORKFLOW_CHANGED="true"
-          else
-            echo "No changes in workflow files"
           fi
           
           # Set outputs explicitly
@@ -231,15 +222,8 @@ jobs:
           echo "frontend_changed=${FRONTEND_CHANGED}" >> $GITHUB_OUTPUT
           echo "redis_changed=${REDIS_CHANGED}" >> $GITHUB_OUTPUT
           echo "mongodb_changed=${MONGODB_CHANGED}" >> $GITHUB_OUTPUT
+          echo "vhsm_changed=${VHSM_CHANGED}" >> $GITHUB_OUTPUT
           echo "workflow_changed=${WORKFLOW_CHANGED}" >> $GITHUB_OUTPUT
-          
-          # Debug outputs
-          echo "admin_changed: ${ADMIN_CHANGED}"
-          echo "backend_changed: ${BACKEND_CHANGED}"
-          echo "frontend_changed: ${FRONTEND_CHANGED}"
-          echo "redis_changed: ${REDIS_CHANGED}"
-          echo "mongodb_changed: ${MONGODB_CHANGED}"
-          echo "workflow_changed: ${WORKFLOW_CHANGED}"
 
   deploy-redis:
     name: Deploy Redis to EKS
@@ -275,6 +259,25 @@ jobs:
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+  deploy-vhsm:
+    name: Deploy VHSM to EKS
+    needs: [set-environment, check-changes]
+    if: |
+      always() && 
+      (needs.check-changes.outputs.vhsm_changed == 'true' || 
+       (needs.check-changes.outputs.workflow_changed == 'true' && 
+        (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_vhsm == 'true'))) &&
+      (github.event_name != 'workflow_dispatch' || github.event.inputs.check_redis_only != 'true')
+    uses: ./.github/workflows/deploy-vhsm.yml
+    with:
+      environment: ${{ needs.set-environment.outputs.environment }}
+      namespace: ${{ needs.set-environment.outputs.vhsm_namespace }}
+      skip_deployment: ${{ github.event.inputs.deploy_vhsm == 'false' }}
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      VHSM_LICENCE: ${{ secrets.VHSM_LICENCE }}
 
   deploy-admin:
     name: Deploy Admin to EKS
@@ -337,7 +340,7 @@ jobs:
 
   deployment-summary:
     name: Deployment Summary
-    needs: [set-environment, deploy-redis, deploy-mongodb, deploy-admin, deploy-backend, deploy-frontend]
+    needs: [set-environment, deploy-redis, deploy-mongodb, deploy-vhsm, deploy-admin, deploy-backend, deploy-frontend]
     if: always()
     runs-on: ubuntu-latest
     env:
@@ -359,13 +362,15 @@ jobs:
       - name: Generate deployment summary
         run: |
           NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          VHSM_NAMESPACE="${{ needs.set-environment.outputs.vhsm_namespace }}"
           ENVIRONMENT="${{ needs.set-environment.outputs.environment }}"
           
-          echo "=== DEPLOYMENT SUMMARY FOR $ENVIRONMENT ($NAMESPACE) ==="
+          echo "=== DEPLOYMENT SUMMARY FOR $ENVIRONMENT ==="
           echo ""
           
           echo "Redis: ${{ needs.deploy-redis.result }}"
           echo "MongoDB: ${{ needs.deploy-mongodb.result }}"
+          echo "VHSM: ${{ needs.deploy-vhsm.result }}"
           echo "Admin: ${{ needs.deploy-admin.result }}"
           echo "Backend: ${{ needs.deploy-backend.result }}"
           echo "Frontend: ${{ needs.deploy-frontend.result }}"
@@ -374,13 +379,18 @@ jobs:
           echo "=== SERVICE STATUS ==="
           echo "REDIS: $(kubectl get statefulset redis -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not deployed')"
           echo "MONGODB: $(kubectl get statefulset mongodb -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not deployed')"
+          echo "VHSM: $(kubectl get statefulset vhsm-server -n $VHSM_NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not deployed')"
           echo "ADMIN: $(kubectl get statefulset admin -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not deployed')"
           echo "BACKEND: $(kubectl get statefulset backend -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not deployed')"
           echo "FRONTEND: $(kubectl get deployment frontend -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not deployed')"
           echo ""
           
-          echo "=== POD STATUS ==="
+          echo "=== POD STATUS ($NAMESPACE) ==="
           kubectl get pods -n $NAMESPACE
+          
+          echo ""
+          echo "=== POD STATUS ($VHSM_NAMESPACE) ==="
+          kubectl get pods -n $VHSM_NAMESPACE || echo "No VHSM namespace found"
           
           echo ""
           echo "=== DEPLOYMENT COMPLETE ==="
