@@ -48,7 +48,7 @@ jobs:
           apiVersion: storage.k8s.io/v1
           kind: StorageClass
           metadata:
-            name: gp3-csi
+            name: gp3-csi-immediate
             annotations:
               storageclass.kubernetes.io/is-default-class: "true"
           provisioner: ebs.csi.aws.com
@@ -60,7 +60,7 @@ jobs:
           allowVolumeExpansion: true
           EOF
           
-          echo "Created/updated gp3-csi storage class"
+          echo "Created/updated gp3-csi-immediate storage class"
       
       - name: Deploy Redis
         uses: ./.github/actions/deploy-helm-chart
@@ -73,7 +73,7 @@ jobs:
           image-repository: redis
           image-tag: 6.2-alpine
           # Ensure we use the EBS CSI storage class
-          additional-set-values: --set persistence.storageClass="gp3-csi"
+          additional-set-values: --set persistence.storageClass="gp3-csi-immediate"
           timeout: 10m
       
       - name: Report Redis deployment status
@@ -88,4 +88,4 @@ jobs:
           kubectl get pvc -n $NAMESPACE -l app=redis || echo "No PVCs found"
           
           echo "=== Storage Class Information ==="
-          kubectl get storageclass gp3-csi || echo "Storage class not found"
+          kubectl get storageclass gp3-csi-immediate || echo "Storage class not found"

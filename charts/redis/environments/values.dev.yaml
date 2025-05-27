@@ -31,7 +31,7 @@ redis:
 persistence:
   enabled: true
   # Use EBS CSI driver with GP3 for better performance
-  storageClass: "gp3-csi"
+  storageClass: "gp3-csi-immediate"
   size: "512Mi"
   accessMode: "ReadWriteOnce"
 
