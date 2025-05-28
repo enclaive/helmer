@@ -3,7 +3,7 @@
 # EBS CSI Driver Installation - Let EKS choose the version
 set -e
 
-CLUSTER_NAME="emcp-eks-cluster"
+CLUSTER_NAME="enclaive-cluster"
 AWS_REGION="eu-central-1"
 AWS_ACCOUNT_ID="886093416603"
 

@@ -1,7 +1,7 @@
 # EKS and AWS Configuration Variables
 eks:
     region: eu-central-1
-    cluster_name: emcp-eks-cluster
+    cluster_name: enclaive-cluster
     account_id: 886093416603
   
   # Service-specific configuration

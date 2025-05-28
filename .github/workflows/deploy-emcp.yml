@@ -345,7 +345,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       AWS_REGION: eu-central-1
-      EKS_CLUSTER_NAME: emcp-eks-cluster
+      EKS_CLUSTER_NAME: enclaive-cluster
     
     steps:
       - name: Configure AWS credentials

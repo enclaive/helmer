@@ -20,7 +20,7 @@ data:
 
 
         eksctl create iamidentitymapping \
-  --cluster emcp-eks-cluster \
+  --cluster enclaive-cluster \
   --region eu-central-1 \
   --arn arn:aws:iam::886093416603:user/github-actions-deploy \
   --username github-actions-deploy \
