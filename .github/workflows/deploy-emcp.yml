@@ -46,8 +46,8 @@ on:
         type: boolean
       deploy_frontend:
         description: 'Deploy frontend service'
-        required: true
-        default: true
+        required: false
+        default: false
         type: boolean
       deploy_redis:
         description: 'Deploy redis service'
