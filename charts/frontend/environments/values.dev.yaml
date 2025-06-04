@@ -4,7 +4,7 @@ domain: dev.enclaive.cloud
 replicaCount: 1
 
 image:
-  repository: 886093416603.dkr.ecr.eu-central-1.amazonaws.com/frontend
+  repository: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.eu-central-1.amazonaws.com/frontend
   tag: "dev"
   pullPolicy: Always
 

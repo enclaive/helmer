@@ -5,13 +5,13 @@ metadata:
   namespace: kube-system
 data:
   mapRoles: |
-    - rolearn: arn:aws:iam::886093416603:role/some-role
+    - rolearn: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/some-role
       username: system:node:{{EC2PrivateDNSName}}
       groups:
         - system:bootstrappers
         - system:nodes
   mapUsers: |
-    - userarn: arn:aws:iam::886093416603:user/github-actions-deploy
+    - userarn: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:user/github-actions-deploy
       username: github-actions-deploy
       groups:
         - system:masters
@@ -22,6 +22,6 @@ data:
         eksctl create iamidentitymapping \
   --cluster enclaive-cluster \
   --region eu-central-1 \
-  --arn arn:aws:iam::886093416603:user/github-actions-deploy \
+  --arn arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:user/github-actions-deploy \
   --username github-actions-deploy \
   --group system:masters

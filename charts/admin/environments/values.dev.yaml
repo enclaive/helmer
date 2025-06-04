@@ -3,6 +3,6 @@ domain: dev.emcp.admin.com
 replicaCount: 1 # Fewer replicas in dev
 
 image:
-  repository: 886093416603.dkr.ecr.eu-central-1.amazonaws.com/emcp
+  repository: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.eu-central-1.amazonaws.com/emcp
   tag: "dev"
   pullPolicy: Always

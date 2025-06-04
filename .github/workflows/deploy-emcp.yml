@@ -78,16 +78,16 @@ jobs:
       environment: ${{ steps.set-env.outputs.environment }}
       namespace: ${{ steps.set-env.outputs.namespace }}
       vhsm_namespace: ${{ steps.set-env.outputs.vhsm_namespace }}
+      aws_account_id: ${{ steps.set-env.outputs.aws_account_id }}
+      eks_cluster_name: ${{ steps.set-env.outputs.eks_cluster_name }}
     
     steps:
-      - name: Set environment based on branch or input
+      - name: Set environment and account based on branch or input
         id: set-env
         run: |
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            # For manual runs, use the provided input
             ENVIRONMENT="${{ github.event.inputs.environment }}"
           else
-            # For push events, use the branch name
             if [ "${{ github.ref }}" == "refs/heads/main" ]; then
               ENVIRONMENT="prod"
             elif [ "${{ github.ref }}" == "refs/heads/staging" ]; then
@@ -100,14 +100,25 @@ jobs:
             fi
           fi
           
-          # Set environment and namespace
+          # Set AWS account and cluster based on environment
+          if [ "$ENVIRONMENT" == "prod" ]; then
+            AWS_ACCOUNT_ID="596861913968"
+            EKS_CLUSTER_NAME="enclaive-prod-cluster"
+          else
+            AWS_ACCOUNT_ID="886093416603"
+            EKS_CLUSTER_NAME="enclaive-cluster"
+          fi
+          
           echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
           echo "namespace=emcp-$ENVIRONMENT" >> $GITHUB_OUTPUT
           echo "vhsm_namespace=vhsm-$ENVIRONMENT" >> $GITHUB_OUTPUT
+          echo "aws_account_id=$AWS_ACCOUNT_ID" >> $GITHUB_OUTPUT
+          echo "eks_cluster_name=$EKS_CLUSTER_NAME" >> $GITHUB_OUTPUT
           
           echo "Selected environment: $ENVIRONMENT"
+          echo "Using AWS Account: $AWS_ACCOUNT_ID"
+          echo "Using EKS Cluster: $EKS_CLUSTER_NAME"
           echo "Using namespace: emcp-$ENVIRONMENT"
-          echo "Using VHSM namespace: vhsm-$ENVIRONMENT"
 
   check-changes:
     name: Check for Changes

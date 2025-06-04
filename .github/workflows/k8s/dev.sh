@@ -13,7 +13,7 @@ ensure_namespace "$NAMESPACE"
 echo "Creating ECR pull credentials..."
 TOKEN=$(aws ecr get-login-password --region eu-central-1)
 kubectl create secret docker-registry aws-ecr-creds \
-  --docker-server=886093416603.dkr.ecr.eu-central-1.amazonaws.com \
+  --docker-server=${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.eu-central-1.amazonaws.com \
   --docker-username=AWS \
   --docker-password="${TOKEN}" \
   --namespace=${NAMESPACE} \
@@ -47,7 +47,7 @@ helm upgrade --install admin ./charts/admin \
   --namespace "$NAMESPACE" \
   --create-namespace \
   --values ./charts/admin/environments/values.dev.yaml \
-  --set image.repository="886093416603.dkr.ecr.eu-central-1.amazonaws.com/admin" \
+  --set image.repository="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.eu-central-1.amazonaws.com/admin" \
   --set image.tag="dev" \
   --set image.pullPolicy=Always \
   --set imagePullSecrets[0].name=aws-ecr-creds \
@@ -66,7 +66,7 @@ helm upgrade --install backend ./charts/backend \
   --namespace "$NAMESPACE" \
   --create-namespace \
   --values ./charts/backend/environments/values.dev.yaml \
-  --set image.repository="886093416603.dkr.ecr.eu-central-1.amazonaws.com/backend0" \
+  --set image.repository="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.eu-central-1.amazonaws.com/backend0" \
   --set image.tag="dev" \
   --set image.pullPolicy=Always \
   --set imagePullSecrets[0].name=aws-ecr-creds \
