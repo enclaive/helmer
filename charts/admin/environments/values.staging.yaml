@@ -1,10 +1,9 @@
-    namespace: emcp-staging                                                           
-    domain: staging.emcp.admin.com                                                       
-    replicaCount: 1 # Fewer replicas in dev                                       
+
+# charts/admin/environments/values.staging.yaml
+namespace: emcp-staging                                                           
+domain: staging.emcp.admin.com                                                       
+replicaCount: 1                                       
                                                                                   
-    image:                                                                        
-      repository: harbor.enclaive.cloud/emcp/admin
-      tag: "staging-latest"                                                           
-                                                                                  
-    persistence:                                                                  
-      size: 512Mi  # Smaller volume in dev 
+image:                                                                        
+  repository: harbor.enclaive.cloud/emcp/admin
+  tag: "staging-latest"

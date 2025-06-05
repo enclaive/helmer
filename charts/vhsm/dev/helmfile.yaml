@@ -1,0 +1,77 @@
+releases:
+
+- name: vhsm
+  namespace: emcp-dev
+  chart: oci://harbor.enclaive.cloud/vhsm/vhsm
+  version: 0.28.4
+  values:
+    - fullnameOverride: vhsm
+
+    - server:
+        image:
+          repository: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.eu-central-1.amazonaws.com/vhsm
+          tag: dev
+          pullPolicy: Always
+
+        # Add ECR image pull secrets
+        imagePullSecrets:
+          - name: aws-ecr-creds
+
+        updateStrategyType: RollingUpdate
+
+        dataStorage:
+          # Use EBS CSI storage class for EKS
+          storageClass: gp3
+
+        extraSecretEnvironmentVars:
+          - envName: ENCLAIVE_LICENCE
+            secretName: vhsm-licence
+            secretKey: ENCLAIVE_LICENCE
+
+        ingress:
+          enabled: true
+
+          annotations:
+            cert-manager.io/cluster-issuer: letsencrypt
+
+          ingressClassName: public
+
+          hosts:
+            - host: emcp-dev.enclaive.cloud
+
+          tls:
+            - hosts:
+                - emcp-dev.enclaive.cloud
+              secretName: vhsm-dev-ingress-tls
+        
+        ha:
+          enabled: true
+
+          raft:
+            enabled: true
+            config: |
+              plugin_directory = "/vault/plugins/"
+              ui = true
+  
+              listener "tcp" {
+                tls_disable = 1
+                address = "[::]:8200"
+                cluster_address = "[::]:8201"
+              }
+  
+              storage "raft" {
+                path = "/vault/data"
+              }
+
+              telemetry {
+                prometheus_retention_time = "30s"
+                disable_hostname = true
+              }
+
+              service_registration "kubernetes" {}
+
+        authDelegator:
+          enabled: false
+
+    - injector:
+        enabled: false

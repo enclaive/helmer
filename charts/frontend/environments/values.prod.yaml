@@ -1,0 +1,46 @@
+# Updated values.prod.yaml
+namespace: emcp-prod
+domain: enclaive.cloud
+replicaCount: 2
+
+image:
+  repository: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.eu-central-1.amazonaws.com/frontend
+  tag: "prod"
+  pullPolicy: Always
+
+# Enable ingress for production
+ingress:
+  enabled: true
+  className: "public"
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+  certManager:
+    enabled: true
+    issuer: "letsencrypt" 
+  additionalHosts:
+    - govtech.enclaive.cloud
+    - prianto.enclaive.cloud
+
+# Resources for production environment
+resources:
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+# API endpoints for production
+api:
+  url: "https://emcp-prod.enclaive.cloud"
+auth:
+  url: "https://auth.enclaive.cloud" 
+app:
+  url: "https://console.enclaive.cloud"
+
+# Logging configuration for production
+logging:
+  level: info
+  format: json

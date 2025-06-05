@@ -1,8 +1,0 @@
-namespace: emcp-prod
-replicaCount: 1  # Reduced to 1 to minimize costs
-
-image:
-  tag: "6.2-alpine"
-
-persistence:
-  size: 512Mi # Slightly larger for production

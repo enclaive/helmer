@@ -1,0 +1,58 @@
+# Values specific to dev environment
+namespace: emcp-prod
+replicaCount: 1
+
+image:
+  repository: redis
+  tag: "6.2-alpine"
+  pullPolicy: IfNotPresent
+
+# Redis configuration
+redis:
+  port: 6379
+  password: ""  # Should use a secret in production
+  config:
+    maxmemory: "128mb"
+    maxmemory-policy: "allkeys-lru"
+    appendonly: "yes"
+    appendfsync: "everysec"
+
+# Resources for dev environment
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+    
+tolerations:
+- key: "CriticalAddonsOnly"
+  operator: "Exists"
+  effect: "NoSchedule"
+
+# Persistence config for dev
+persistence:
+  enabled: true
+  storageClass: "gp3"
+  accessMode: ReadWriteOnce
+  size: 1Gi
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 6379
+  targetPort: 6379
+
+# Health check probes
+probes:
+  liveness:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3

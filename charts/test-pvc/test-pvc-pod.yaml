@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: openebs-test-pod
+  namespace: emcp-dev
+spec:
+  containers:
+  - name: test-container
+    image: busybox
+    command: ["/bin/sh", "-c", "echo 'OpenEBS test - writing to volume' > /data/test.txt && cat /data/test.txt && tail -f /dev/null"]
+    volumeMounts:
+    - name: test-volume
+      mountPath: /data
+  volumes:
+  - name: test-volume
+    persistentVolumeClaim:
+      claimName: openebs-test-pvc

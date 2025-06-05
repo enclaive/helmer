@@ -1,0 +1,66 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mongodb-backup
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mongodb
+    {{- include "mongodb.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 3
+  successfulJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: mongodb-backup
+        spec:
+          containers:
+            - name: mongodb-backup
+              image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  set -e
+                  TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+                  BACKUP_DIR="/backup/mongodb-$TIMESTAMP"
+                  mkdir -p $BACKUP_DIR
+                  
+                  echo "Starting MongoDB backup at $(date)"
+                  mongodump --host=mongodb.{{ .Release.Namespace }}.svc.cluster.local \
+                    --port={{ .Values.mongodb.port }} \
+                    --username=$MONGO_INITDB_ROOT_USERNAME \
+                    --password=$MONGO_INITDB_ROOT_PASSWORD \
+                    --authenticationDatabase=admin \
+                    --db={{ .Values.backup.database }} \
+                    --out=$BACKUP_DIR
+                  
+                  echo "Backup completed successfully at $(date)"
+                  echo "Backup saved to $BACKUP_DIR"
+                  
+                  # List existing backups and keep only the latest N
+                  ls -tp /backup/ | grep -v '/$' | tail -n +{{ add .Values.backup.retentionCount 1 }} | xargs -I {} rm -- /backup/{}
+              env:
+                - name: MONGO_INITDB_ROOT_USERNAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: mongodb-credentials
+                      key: username
+                - name: MONGO_INITDB_ROOT_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: mongodb-credentials
+                      key: password
+              volumeMounts:
+                - name: backup-volume
+                  mountPath: /backup
+          volumes:
+            - name: backup-volume
+              persistentVolumeClaim:
+                claimName: mongodb-backup-pvc
+          restartPolicy: OnFailure

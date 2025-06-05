@@ -1,0 +1,38 @@
+name: 'Create ECR Credentials'
+description: 'Create Kubernetes secret for ECR authentication'
+
+inputs:
+  aws-region:
+    description: 'AWS region'
+    required: true
+  aws-account-id:
+    description: 'AWS account ID'
+    required: true
+  namespace:
+    description: 'Kubernetes namespace'
+    required: true
+  secret-name:
+    description: 'Name of the Kubernetes secret'
+    required: true
+    default: 'aws-ecr-creds'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Create ECR pull credentials
+      shell: bash
+      run: |
+        NAMESPACE="${{ inputs.namespace }}"
+        
+        # Get ECR login token
+        TOKEN=$(aws ecr get-login-password --region ${{ inputs.aws-region }})
+        
+        # Create the Kubernetes secret for ECR
+        kubectl create secret docker-registry ${{ inputs.secret-name }} \
+          --docker-server=${{ inputs.aws-account-id }}.dkr.ecr.${{ inputs.aws-region }}.amazonaws.com \
+          --docker-username=AWS \
+          --docker-password="$TOKEN" \
+          --namespace=$NAMESPACE \
+          --dry-run=client -o yaml | kubectl apply -f -
+          
+        echo "Created ECR pull secret: ${{ inputs.secret-name }}"

@@ -1,0 +1,407 @@
+name: Deploy Services to EKS from ECR
+
+on:
+  push:
+    branches: [ main, dev, staging ]
+    paths:
+      - 'charts/admin/templates/**'
+      - 'charts/admin/Chart.yaml'
+      - 'charts/admin/values.yaml'
+      - 'charts/admin/environments/*.yaml'
+      - 'charts/backend/templates/**'
+      - 'charts/backend/Chart.yaml'
+      - 'charts/backend/values.yaml'
+      - 'charts/backend/environments/*.yaml'
+      - 'charts/frontend/templates/**'
+      - 'charts/frontend/Chart.yaml'
+      - 'charts/frontend/values.yaml'
+      - 'charts/frontend/environments/*.yaml'
+      - 'charts/redis/templates/**'
+      - 'charts/redis/Chart.yaml'
+      - 'charts/redis/values.yaml'
+      - 'charts/redis/environments/*.yaml'
+      - 'charts/mongo/**'
+      - 'charts/vhsm/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to (dev, staging, prod)'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      deploy_admin:
+        description: 'Deploy admin service'
+        required: false
+        default: false
+        type: boolean
+      deploy_backend:
+        description: 'Deploy backend service'
+        required: false
+        default: false
+        type: boolean
+      deploy_frontend:
+        description: 'Deploy frontend service'
+        required: false
+        default: false
+        type: boolean
+      deploy_redis:
+        description: 'Deploy redis service'
+        required: false
+        default: false
+        type: boolean
+      deploy_mongodb:
+        description: 'Deploy mongodb service'
+        required: false
+        default: false
+        type: boolean
+      deploy_vhsm:
+        description: 'Deploy VHSM service'
+        required: false
+        default: false
+        type: boolean
+      check_redis_only:
+        description: 'Only check if Redis exists without redeploying'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  set-environment:
+    name: Set Environment
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.set-env.outputs.environment }}
+      namespace: ${{ steps.set-env.outputs.namespace }}
+      vhsm_namespace: ${{ steps.set-env.outputs.vhsm_namespace }}
+      aws_account_id: ${{ steps.set-env.outputs.aws_account_id }}
+      eks_cluster_name: ${{ steps.set-env.outputs.eks_cluster_name }}
+    
+    steps:
+      - name: Set environment and account based on branch or input
+        id: set-env
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            ENVIRONMENT="${{ github.event.inputs.environment }}"
+          else
+            if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+              ENVIRONMENT="prod"
+            elif [ "${{ github.ref }}" == "refs/heads/staging" ]; then
+              ENVIRONMENT="staging"
+            elif [ "${{ github.ref }}" == "refs/heads/dev" ]; then
+              ENVIRONMENT="dev"
+            else
+              echo "Unsupported branch for deployment: ${{ github.ref }}"
+              exit 1
+            fi
+          fi
+          
+          # Set AWS account and cluster based on environment
+          if [ "$ENVIRONMENT" == "prod" ]; then
+            AWS_ACCOUNT_ID="596861913968"
+            EKS_CLUSTER_NAME="enclaive-prod-cluster"
+          else
+            AWS_ACCOUNT_ID="886093416603"
+            EKS_CLUSTER_NAME="enclaive-cluster"
+          fi
+          
+          echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
+          echo "namespace=emcp-$ENVIRONMENT" >> $GITHUB_OUTPUT
+          echo "vhsm_namespace=vhsm-$ENVIRONMENT" >> $GITHUB_OUTPUT
+          echo "aws_account_id=$AWS_ACCOUNT_ID" >> $GITHUB_OUTPUT
+          echo "eks_cluster_name=$EKS_CLUSTER_NAME" >> $GITHUB_OUTPUT
+          
+          echo "Selected environment: $ENVIRONMENT"
+          echo "Using AWS Account: $AWS_ACCOUNT_ID"
+          echo "Using EKS Cluster: $EKS_CLUSTER_NAME"
+          echo "Using namespace: emcp-$ENVIRONMENT"
+
+  check-changes:
+    name: Check for Changes
+    runs-on: ubuntu-latest
+    outputs:
+      admin_changed: ${{ steps.check-folders.outputs.admin_changed }}
+      backend_changed: ${{ steps.check-folders.outputs.backend_changed }}
+      frontend_changed: ${{ steps.check-folders.outputs.frontend_changed }}
+      redis_changed: ${{ steps.check-folders.outputs.redis_changed }}
+      mongodb_changed: ${{ steps.check-folders.outputs.mongodb_changed }}
+      vhsm_changed: ${{ steps.check-folders.outputs.vhsm_changed }}
+      workflow_changed: ${{ steps.check-folders.outputs.workflow_changed }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2  # Needed for file comparison with previous commit
+      
+      - name: Check which folders changed
+        id: check-folders
+        run: |
+          # For workflow_dispatch, use the input values
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            # Check if check_redis_only is true
+            if [ "${{ github.event.inputs.check_redis_only }}" == "true" ]; then
+              echo "admin_changed=false" >> $GITHUB_OUTPUT
+              echo "backend_changed=false" >> $GITHUB_OUTPUT
+              echo "frontend_changed=false" >> $GITHUB_OUTPUT
+              echo "redis_changed=false" >> $GITHUB_OUTPUT
+              echo "mongodb_changed=false" >> $GITHUB_OUTPUT
+              echo "vhsm_changed=false" >> $GITHUB_OUTPUT
+              echo "workflow_changed=true" >> $GITHUB_OUTPUT
+            else
+              echo "admin_changed=${{ github.event.inputs.deploy_admin }}" >> $GITHUB_OUTPUT
+              echo "backend_changed=${{ github.event.inputs.deploy_backend }}" >> $GITHUB_OUTPUT
+              echo "frontend_changed=${{ github.event.inputs.deploy_frontend }}" >> $GITHUB_OUTPUT
+              echo "redis_changed=${{ github.event.inputs.deploy_redis }}" >> $GITHUB_OUTPUT
+              echo "mongodb_changed=${{ github.event.inputs.deploy_mongodb }}" >> $GITHUB_OUTPUT
+              echo "vhsm_changed=${{ github.event.inputs.deploy_vhsm }}" >> $GITHUB_OUTPUT
+              echo "workflow_changed=true" >> $GITHUB_OUTPUT
+            fi
+            exit 0
+          fi
+          
+          # For push events, check which files changed with precise logic
+          echo "Checking changes in the last commit..."
+          
+          # Get changed files
+          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD || git diff --name-only $(git rev-parse --short HEAD^) $(git rev-parse --short HEAD))
+          echo "Changed files: $CHANGED_FILES"
+          
+          # Default all to false
+          ADMIN_CHANGED="false"
+          BACKEND_CHANGED="false"
+          FRONTEND_CHANGED="false"
+          REDIS_CHANGED="false"
+          MONGODB_CHANGED="false"
+          VHSM_CHANGED="false"
+          WORKFLOW_CHANGED="false"
+          
+          # Check if specific folders were modified with precise targeting
+          if echo "$CHANGED_FILES" | grep -q "^charts/admin/"; then
+            if echo "$CHANGED_FILES" | grep -E -q "^charts/admin/(templates|values\.yaml|Chart\.yaml|environments/values\.[^/]+\.yaml)"; then
+              echo "Admin service files changed"
+              ADMIN_CHANGED="true"
+            fi
+          fi
+          
+          if echo "$CHANGED_FILES" | grep -q "^charts/backend/"; then
+            if echo "$CHANGED_FILES" | grep -E -q "^charts/backend/(templates|values\.yaml|Chart\.yaml|environments/values\.[^/]+\.yaml)"; then
+              echo "Backend service files changed"
+              BACKEND_CHANGED="true"
+            fi
+          fi
+          
+          if echo "$CHANGED_FILES" | grep -q "^charts/frontend/"; then
+            if echo "$CHANGED_FILES" | grep -E -q "^charts/frontend/(templates|values\.yaml|Chart\.yaml|environments/values\.[^/]+\.yaml)"; then
+              echo "Frontend service files changed"
+              FRONTEND_CHANGED="true"
+            fi
+          fi
+          
+          if echo "$CHANGED_FILES" | grep -q "^charts/redis/"; then
+            if echo "$CHANGED_FILES" | grep -E -q "^charts/redis/(templates|values\.yaml|Chart\.yaml|environments/values\.[^/]+\.yaml)"; then
+              echo "Redis service files changed"
+              REDIS_CHANGED="true"
+            fi
+          fi
+          
+          if echo "$CHANGED_FILES" | grep -q "^charts/mongo/"; then
+            if echo "$CHANGED_FILES" | grep -E -q "^charts/mongo/(templates|values\.yaml|Chart\.yaml|environments/values\.[^/]+\.yaml)"; then
+              echo "MongoDB service files changed"
+              MONGODB_CHANGED="true"
+            fi
+          fi
+          
+          if echo "$CHANGED_FILES" | grep -q "^charts/vhsm/"; then
+            echo "VHSM service files changed"
+            VHSM_CHANGED="true"
+          fi
+          
+          # Check if workflow files changed
+          if echo "$CHANGED_FILES" | grep -E -q "^\.github/workflows/(deploy-emcp\.yml|deploy-mongodb\.yml|deploy-vhsm\.yml|k8s/(common|dev|staging|prod)\.sh)"; then
+            echo "Deployment workflow files changed"
+            WORKFLOW_CHANGED="true"
+          fi
+          
+          # Set outputs explicitly
+          echo "admin_changed=${ADMIN_CHANGED}" >> $GITHUB_OUTPUT
+          echo "backend_changed=${BACKEND_CHANGED}" >> $GITHUB_OUTPUT
+          echo "frontend_changed=${FRONTEND_CHANGED}" >> $GITHUB_OUTPUT
+          echo "redis_changed=${REDIS_CHANGED}" >> $GITHUB_OUTPUT
+          echo "mongodb_changed=${MONGODB_CHANGED}" >> $GITHUB_OUTPUT
+          echo "vhsm_changed=${VHSM_CHANGED}" >> $GITHUB_OUTPUT
+          echo "workflow_changed=${WORKFLOW_CHANGED}" >> $GITHUB_OUTPUT
+
+  deploy-redis:
+    name: Deploy Redis to EKS
+    needs: [set-environment, check-changes]
+    if: |
+      always() && 
+      (needs.check-changes.outputs.redis_changed == 'true' || 
+       (needs.check-changes.outputs.workflow_changed == 'true' && 
+        (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_redis == 'true' || github.event.inputs.check_redis_only == 'true')))
+    uses: ./.github/workflows/deploy-redis.yml
+    with:
+      environment: ${{ needs.set-environment.outputs.environment }}
+      namespace: ${{ needs.set-environment.outputs.namespace }}
+      skip_deployment: ${{ github.event.inputs.deploy_redis == 'false' && github.event.inputs.check_redis_only != 'true' }}
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+  deploy-mongodb:
+    name: Deploy MongoDB to EKS
+    needs: [set-environment, check-changes, deploy-redis]
+    if: |
+      always() && 
+      (needs.check-changes.outputs.mongodb_changed == 'true' || 
+       (needs.check-changes.outputs.workflow_changed == 'true' && 
+        (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_mongodb == 'true'))) &&
+      (github.event_name != 'workflow_dispatch' || github.event.inputs.check_redis_only != 'true')
+    uses: ./.github/workflows/deploy-mongodb.yml
+    with:
+      environment: ${{ needs.set-environment.outputs.environment }}
+      namespace: ${{ needs.set-environment.outputs.namespace }}
+      skip_deployment: ${{ github.event.inputs.deploy_mongodb == 'false' }}
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+  deploy-vhsm:
+    name: Deploy VHSM to EKS
+    needs: [set-environment, check-changes]
+    if: |
+      always() && 
+      (needs.check-changes.outputs.vhsm_changed == 'true' || 
+       (needs.check-changes.outputs.workflow_changed == 'true' && 
+        (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_vhsm == 'true'))) &&
+      (github.event_name != 'workflow_dispatch' || github.event.inputs.check_redis_only != 'true')
+    uses: ./.github/workflows/deploy-vhsm.yml
+    with:
+      environment: ${{ needs.set-environment.outputs.environment }}
+      namespace: ${{ needs.set-environment.outputs.vhsm_namespace }}
+      skip_deployment: ${{ github.event.inputs.deploy_vhsm == 'false' }}
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      VHSM_LICENCE: ${{ secrets.VHSM_LICENCE }}
+
+  deploy-admin:
+    name: Deploy Admin to EKS
+    needs: [set-environment, check-changes, deploy-redis]
+    if: |
+      always() && 
+      needs.deploy-redis.result != 'skipped' &&
+      (needs.check-changes.outputs.admin_changed == 'true' || 
+       (needs.check-changes.outputs.workflow_changed == 'true' && 
+        (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_admin == 'true'))) &&
+      (github.event_name != 'workflow_dispatch' || github.event.inputs.check_redis_only != 'true')
+    uses: ./.github/workflows/deploy-admin.yml
+    with:
+      environment: ${{ needs.set-environment.outputs.environment }}
+      namespace: ${{ needs.set-environment.outputs.namespace }}
+      skip_deployment: ${{ github.event.inputs.deploy_admin == 'false' }}
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+  deploy-backend:
+    name: Deploy Backend to EKS
+    needs: [set-environment, check-changes, deploy-redis, deploy-mongodb, deploy-admin]
+    if: |
+      always() && 
+      needs.deploy-redis.result != 'skipped' &&
+      needs.deploy-mongodb.result != 'skipped' &&
+      (needs.check-changes.outputs.backend_changed == 'true' || 
+       (needs.check-changes.outputs.workflow_changed == 'true' && 
+        (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_backend == 'true'))) &&
+      (github.event_name != 'workflow_dispatch' || github.event.inputs.check_redis_only != 'true')
+    uses: ./.github/workflows/deploy-backend.yml
+    with:
+      environment: ${{ needs.set-environment.outputs.environment }}
+      namespace: ${{ needs.set-environment.outputs.namespace }}
+      skip_deployment: ${{ github.event.inputs.deploy_backend == 'false' }}
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+  deploy-frontend:
+    name: Deploy Frontend to EKS
+    needs: [set-environment, check-changes, deploy-redis, deploy-mongodb, deploy-backend]
+    if: |
+      always() && 
+      needs.deploy-redis.result != 'skipped' &&
+      needs.deploy-backend.result != 'skipped' &&
+      (needs.check-changes.outputs.frontend_changed == 'true' || 
+       (needs.check-changes.outputs.workflow_changed == 'true' && 
+        (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_frontend == 'true'))) &&
+      (github.event_name != 'workflow_dispatch' || github.event.inputs.check_redis_only != 'true')
+    uses: ./.github/workflows/deploy-frontend.yml
+    with:
+      environment: ${{ needs.set-environment.outputs.environment }}
+      namespace: ${{ needs.set-environment.outputs.namespace }}
+      skip_deployment: ${{ github.event.inputs.deploy_frontend == 'false' }}
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+  deployment-summary:
+    name: Deployment Summary
+    needs: [set-environment, deploy-redis, deploy-mongodb, deploy-vhsm, deploy-admin, deploy-backend, deploy-frontend]
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: eu-central-1
+      EKS_CLUSTER_NAME: enclaive-cluster
+    
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
+      
+      - name: Generate deployment summary
+        run: |
+          NAMESPACE="${{ needs.set-environment.outputs.namespace }}"
+          VHSM_NAMESPACE="${{ needs.set-environment.outputs.vhsm_namespace }}"
+          ENVIRONMENT="${{ needs.set-environment.outputs.environment }}"
+          
+          echo "=== DEPLOYMENT SUMMARY FOR $ENVIRONMENT ==="
+          echo ""
+          
+          echo "Redis: ${{ needs.deploy-redis.result }}"
+          echo "MongoDB: ${{ needs.deploy-mongodb.result }}"
+          echo "VHSM: ${{ needs.deploy-vhsm.result }}"
+          echo "Admin: ${{ needs.deploy-admin.result }}"
+          echo "Backend: ${{ needs.deploy-backend.result }}"
+          echo "Frontend: ${{ needs.deploy-frontend.result }}"
+          echo ""
+          
+          echo "=== SERVICE STATUS ==="
+          echo "REDIS: $(kubectl get statefulset redis -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not deployed')"
+          echo "MONGODB: $(kubectl get statefulset mongodb -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not deployed')"
+          echo "VHSM: $(kubectl get statefulset vhsm-server -n $VHSM_NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not deployed')"
+          echo "ADMIN: $(kubectl get statefulset admin -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not deployed')"
+          echo "BACKEND: $(kubectl get statefulset backend -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not deployed')"
+          echo "FRONTEND: $(kubectl get deployment frontend -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not deployed')"
+          echo ""
+          
+          echo "=== POD STATUS ($NAMESPACE) ==="
+          kubectl get pods -n $NAMESPACE
+          
+          echo ""
+          echo "=== POD STATUS ($VHSM_NAMESPACE) ==="
+          kubectl get pods -n $VHSM_NAMESPACE || echo "No VHSM namespace found"
+          
+          echo ""
+          echo "=== DEPLOYMENT COMPLETE ==="

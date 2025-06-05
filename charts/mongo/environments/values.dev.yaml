@@ -1,0 +1,56 @@
+namespace: emcp-dev
+replicaCount: 1
+
+image:
+  repository: mongo
+  tag: "5.0.2"
+  pullPolicy: Always
+
+# Minimal resources for development
+resources:
+  limits:
+    cpu: 200m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+# Use OpenEBS for storage like Redis
+persistence:
+  enabled: true
+  storageClass: "gp3"
+  size: "1Gi"
+  accessMode: "ReadWriteOnce"
+
+tolerations:
+- key: "CriticalAddonsOnly"
+  operator: "Exists"
+  effect: "NoSchedule"
+
+# MongoDB configuration
+mongodb:
+  config:
+    cacheSizeGB: 0.25
+  port: 27017
+
+# In dev, disable backups to save resources
+backup:
+  enabled: false
+
+# Auth credentials
+auth:
+  rootUsername: root
+  rootPassword: root
+
+# Health check probes
+probes:
+  liveness:
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+  readiness:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3

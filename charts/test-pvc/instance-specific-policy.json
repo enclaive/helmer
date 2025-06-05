@@ -1,0 +1,16 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ec2:AttachVolume",
+                "ec2:DetachVolume"
+            ],
+            "Resource": [
+                "arn:aws:ec2:eu-central-1:886093416603:instance/i-0f0f6e30c86881baa",
+                "arn:aws:ec2:eu-central-1:886093416603:volume/*"
+            ]
+        }
+    ]
+}

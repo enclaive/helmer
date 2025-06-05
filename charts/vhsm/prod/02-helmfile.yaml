@@ -1,0 +1,67 @@
+releases:
+
+- name: vhsm
+  namespace: vhsm-prod
+  chart: oci://harbor.enclaive.cloud/vhsm/vhsm
+  version: 0.28.4
+  values:
+    - fullnameOverride: vhsm
+
+    - server:
+        image:
+          repository: harbor.enclaive.cloud/vhsm/vhsm
+          tag: gh-run-14196053180-1-110
+          pullPolicy: Always
+
+        updateStrategyType: RollingUpdate
+
+        dataStorage:
+          storageClass: gp3-immediate
+
+        extraSecretEnvironmentVars:
+          - envName: ENCLAIVE_LICENCE
+            secretName: vhsm-licence
+            secretKey: ENCLAIVE_LICENCE
+
+        ingress:
+          enabled: true
+
+          annotations:
+            cert-manager.io/cluster-issuer: letsencrypt
+
+          ingressClassName: public
+
+          hosts:
+            - host: vhsm-prod.enclaive.cloud
+
+          tls:
+            - hosts:
+                - vhsm-prod.enclaive.cloud
+              secretName: vhsm-ingress-tls
+        ha:
+          enabled: true
+
+          raft:
+            enabled: true
+            config: |
+              plugin_directory = "/vault/plugins/"
+              ui = true
+  
+              listener "tcp" {
+                tls_disable = 1
+                address = "[::]:8200"
+                cluster_address = "[::]:8201"
+              }
+  
+              storage "raft" {
+                path = "/vault/data"
+              }
+  
+              service_registration "kubernetes" {}
+
+        authDelegator:
+          enabled: false
+
+    - injector:
+        enabled: false
+

@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: frontend
+    {{- include "frontend.labels" . | nindent 4 }}
+data:
+  # Base configuration for Frontend service
+  config.json: |
+    {
+      "environment": "{{ .Values.environment | default "production" }}",
+      "domain": "{{ .Values.domain }}",
+      "api": {
+        "url": "{{ .Values.api.url }}",
+        "timeout": 30000,
+        "retries": 3
+      },
+      "auth": {
+        "url": "{{ .Values.auth.url }}"
+      },
+      "app": {
+        "url": "{{ .Values.app.url }}"
+      },
+      "features": {
+        "enableAnalytics": {{ .Values.features.enableAnalytics | default true }},
+        "enableHelpCenter": {{ .Values.features.enableHelpCenter | default true }},
+        "enableBetaFeatures": {{ .Values.features.enableBetaFeatures | default false }}
+      },
+      "logging": {
+        "level": "{{ .Values.logging.level | default "info" }}",
+        "format": "{{ .Values.logging.format | default "json" }}"
+      }
+    }
+  
+  # Runtime configuration
+  runtime-config.js: |
+    window.RUNTIME_CONFIG = {
+      apiUrl: "{{ .Values.api.url }}",
+      authUrl: "{{ .Values.auth.url }}",
+      appUrl: "{{ .Values.app.url }}",
+      environment: "{{ .Values.environment | default "production" }}",
+      version: "{{ .Values.image.tag }}",
+      supportEmail: "support@enclaive.cloud"
+    }
+
+    

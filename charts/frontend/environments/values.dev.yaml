@@ -1,0 +1,48 @@
+# Updated values.dev.yaml
+namespace: emcp-dev
+domain: dev.enclaive.cloud
+replicaCount: 1
+
+image:
+  repository: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.eu-central-1.amazonaws.com/frontend
+  tag: "dev"
+  pullPolicy: Always
+
+# Configure ingress for development
+ingress:
+  enabled: true
+  className: "public"
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  certManager:
+    enabled: true
+    issuer: "letsencrypt"
+  additionalHosts: []  # No additional hosts for dev environment
+
+# Resources for development environment
+resources:
+  limits:
+    cpu: 500m
+    memory: 1Gi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+# API endpoints for development
+api:
+  url: "https://emcp-dev.enclaive.cloud"
+auth:
+  url: "https://auth-dev.enclaive.cloud" 
+app:
+  url: "https://console-dev.enclaive.cloud"
+
+# Enable beta features in dev
+features:
+  enableAnalytics: true
+  enableHelpCenter: true
+  enableBetaFeatures: true
+
+# Logging configuration for development
+logging:
+  level: debug
+  format: pretty

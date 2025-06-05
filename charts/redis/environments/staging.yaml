@@ -1,8 +1,0 @@
-namespace: emcp-staging
-replicaCount: 1
-
-image:
-  tag: "6.2-alpine"
-
-persistence:
-  size: 512Mi

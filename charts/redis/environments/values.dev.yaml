@@ -1,0 +1,62 @@
+namespace: emcp-dev
+replicaCount: 1
+
+image:
+  repository: redis
+  tag: "6.2-alpine"
+  pullPolicy: Always
+
+service:
+  type: ClusterIP
+  port: 6379
+  targetPort: 6379
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+redis:
+  port: 6379
+  config:
+    maxmemory: "128mb"
+    maxmemoryPolicy: "allkeys-lru"
+    appendonly: "yes"
+    appendfsync: "everysec"
+  password: ""
+
+persistence:
+  enabled: true
+  # Use gp3-immediate to avoid topology issues
+  storageClass: "gp3-immediate"
+  size: "512Mi"
+  accessMode: "ReadWriteOnce"
+
+# Remove CriticalAddonsOnly toleration to avoid scheduling issues
+tolerations: []
+
+probes:
+  liveness:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+# Add node selector and affinity for better scheduling
+nodeSelector: {}
+affinity: {}
+
+# Security context
+podSecurityContext: {}
+securityContext: {}
+
+# Additional pod annotations
+podAnnotations: {}

@@ -1,0 +1,78 @@
+# Updated values.yaml with better defaults and additional backup configuration
+namespace: default
+replicaCount: 1
+
+image:
+  repository: mongo
+  tag: "5.0.20"  # Updated to latest 5.0.x version for security patches
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 27017
+  targetPort: 27017
+
+# MongoDB configuration
+mongodb:
+  config:
+    cacheSizeGB: 0.5
+  port: 27017
+
+# MongoDB credentials
+auth:
+  rootUsername: root
+  # For production, generate a strong password and update the values files
+  rootPassword: root
+
+# Improved default resources
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1.5Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+podAnnotations: {}
+podSecurityContext: {}
+securityContext: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+persistence:
+  enabled: true
+  storageClass: "gp3"
+  size: "5Gi"  # Increased from 1Gi to 5Gi for better performance
+  accessMode: "ReadWriteOnce"
+
+# Enhanced backup configuration
+backup:
+  enabled: true
+  # Schedule in cron format
+  schedule: "0 2 * * *"  # Daily at 2am
+  # Number of backups to retain
+  retentionCount: 7
+  # Database to backup
+  database: backend_db
+  # Storage for backups
+  storageClass: "gp3"
+  storageSize: "10Gi"
+
+# Health check probes
+probes:
+  liveness:
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+  readiness:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3

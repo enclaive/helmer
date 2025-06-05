@@ -1,0 +1,55 @@
+# EKS and AWS Configuration Variables
+accounts:
+  production:
+    account_id: 596861913968
+    region: eu-central-1
+    cluster_name: enclaive-prod-cluster
+  
+  test:
+    account_id: ${{ env.AWS_ACCOUNT_ID }}
+    region: eu-central-1
+    cluster_name: enclaive-cluster
+
+# Service-specific configuration
+services:
+  mongodb:
+    port: 27017
+    image:
+      repository: mongo
+      tag: 5.0.2
+  redis:
+    port: 6379
+    image:
+      repository: redis
+      tag: 6.2-alpine
+  
+  admin:
+    port: 3000
+    image:
+      repository: admin
+  
+  backend:
+    port: 8080
+    image:
+      repository: backend0
+  
+  frontend:
+    port: 3000
+    image:
+      repository: frontend
+# Environment-specific settings
+environments:
+  dev:
+    log_level: debug
+    log_format: pretty
+    account: test
+  
+  staging:
+    log_level: info
+    log_format: json
+    account: test
+  
+  prod:
+    log_level: info
+    log_format: json
+    account: production

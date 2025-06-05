@@ -1,3 +1,4 @@
+
 # charts/admin/values.yaml
 # Default values for admin
 # This is a YAML-formatted file.
@@ -10,12 +11,12 @@ domain: admin.enclaive.cloud
 replicaCount: 1
 
 image:
-  repository: harbor.enclaive.cloud/emcp/admin
+  repository: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.eu-central-1.amazonaws.com/emcp
   tag: latest
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
 
 imagePullSecrets:
-  - name: harbor-creds
+  - name: aws-ecr-creds
 
 nameOverride: ""
 fullnameOverride: ""
@@ -24,24 +25,6 @@ service:
   type: ClusterIP
   port: 3000
   targetPort: 3000
-  # clusterIP should be left empty for new deployments
-  # clusterIP: null
-
-ingress:
-  enabled: true
-  className: public
-  annotations:
-    cert-manager.io/cluster-issuer: letsencrypt
-  hosts:
-    - host: "admin.{{ .Values.domain }}"
-      paths:
-        - path: /
-          pathType: Prefix
-  additionalHosts: []
-  tls:
-    - secretName: admin-ingress-tls
-      hosts:
-        - "admin.{{ .Values.domain }}"
 
 resources:
   limits:
@@ -63,17 +46,18 @@ tolerations: []
 
 affinity: {}
 
-persistence:
-  enabled: true
-  storageClass: "longhorn"
-  size: 5Gi
+# Default logging configuration
+logging:
+  level: "info"
+  format: "json"
 
+# Health check probes
 probes:
   liveness:
-    initialDelaySeconds: 10
-    periodSeconds: 3
-    failureThreshold: 10
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    failureThreshold: 6
   readiness:
     initialDelaySeconds: 10
-    periodSeconds: 3
-    failureThreshold: 10
+    periodSeconds: 5
+    failureThreshold: 3

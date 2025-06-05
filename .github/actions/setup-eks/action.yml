@@ -1,0 +1,45 @@
+name: 'Setup EKS Deployment'
+description: 'Configure AWS and Kubernetes for EKS deployment'
+
+inputs:
+  aws-access-key:
+    description: 'AWS access key ID'
+    required: true
+  aws-secret-key:
+    description: 'AWS secret access key'
+    required: true
+  aws-region:
+    description: 'AWS region'
+    required: true
+    default: 'eu-central-1'
+  eks-cluster:
+    description: 'EKS cluster name'
+    required: true
+  namespace:
+    description: 'Kubernetes namespace'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ inputs.aws-access-key }}
+        aws-secret-access-key: ${{ inputs.aws-secret-key }}
+        aws-region: ${{ inputs.aws-region }}
+          
+    - name: Update kubeconfig
+      shell: bash
+      run: aws eks update-kubeconfig --name ${{ inputs.eks-cluster }} --region ${{ inputs.aws-region }}
+          
+    - name: Set up Helm
+      uses: azure/setup-helm@v3
+      with:
+        version: 'v3.12.0'
+          
+    - name: Create namespace
+      shell: bash
+      run: |
+        echo "Creating namespace ${{ inputs.namespace }} if it doesn't exist..."
+        kubectl create namespace ${{ inputs.namespace }} --dry-run=client -o yaml | kubectl apply -f -

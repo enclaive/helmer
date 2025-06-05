@@ -1,0 +1,116 @@
+name: Deploy Redis Service
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      namespace:
+        required: true
+        type: string
+      skip_deployment:
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+
+jobs:
+  deploy-redis:
+    name: Deploy Redis
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.skip_deployment }}
+    env:
+      AWS_REGION: eu-central-1
+      EKS_CLUSTER_NAME: enclaive-cluster
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup EKS
+        uses: ./.github/actions/setup-eks
+        with:
+          aws-access-key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          eks-cluster: ${{ env.EKS_CLUSTER_NAME }}
+          namespace: ${{ inputs.namespace }}
+      
+      - name: Create EBS CSI Storage Classes
+        run: |
+          # Create gp3-immediate storage class to avoid topology issues
+          cat <<EOF | kubectl apply -f -
+          apiVersion: storage.k8s.io/v1
+          kind: StorageClass
+          metadata:
+            name: gp3-immediate
+            annotations:
+              storageclass.kubernetes.io/is-default-class: "false"
+          provisioner: ebs.csi.aws.com
+          parameters:
+            type: gp3
+            fsType: ext4
+          reclaimPolicy: Delete
+          volumeBindingMode: Immediate
+          allowVolumeExpansion: true
+          allowedTopologies:
+          - matchLabelExpressions:
+            - key: topology.ebs.csi.aws.com/zone
+              values:
+              - eu-central-1a
+              - eu-central-1b
+              - eu-central-1c
+          EOF
+          
+          # Keep the original gp3 storage class as well
+          cat <<EOF | kubectl apply -f -
+          apiVersion: storage.k8s.io/v1
+          kind: StorageClass
+          metadata:
+            name: gp3
+            annotations:
+              storageclass.kubernetes.io/is-default-class: "true"
+          provisioner: ebs.csi.aws.com
+          parameters:
+            type: gp3
+            fsType: ext4
+          reclaimPolicy: Delete
+          volumeBindingMode: WaitForFirstConsumer
+          allowVolumeExpansion: true
+          EOF
+          
+          echo "Created/updated storage classes"
+      
+      - name: Deploy Redis
+        uses: ./.github/actions/deploy-helm-chart
+        with:
+          service-name: redis
+          chart-path: ./charts/redis
+          values-file: ./charts/redis/environments/values.${{ inputs.environment }}.yaml
+          namespace: ${{ inputs.namespace }}
+          environment: ${{ inputs.environment }}
+          image-repository: redis
+          image-tag: 6.2-alpine
+          # Use the immediate binding storage class
+          additional-set-values: --set persistence.storageClass="gp3-immediate"
+          timeout: 10m
+      
+      - name: Report Redis deployment status
+        if: always()
+        run: |
+          NAMESPACE="${{ inputs.namespace }}"
+          
+          echo "=== Redis Deployment Status for ${{ inputs.environment }} ==="
+          kubectl get statefulset redis -n $NAMESPACE || echo "StatefulSet not found"
+          kubectl get pods -n $NAMESPACE -l app=redis || echo "No Redis pods found"
+          kubectl get service redis -n $NAMESPACE || echo "Service not found"
+          kubectl get pvc -n $NAMESPACE -l app=redis || echo "No PVCs found"
+          
+          echo "=== Storage Class Information ==="
+          kubectl get storageclass gp3-immediate || echo "Immediate storage class not found"
+          kubectl get storageclass gp3 || echo "WaitForFirstConsumer storage class not found"

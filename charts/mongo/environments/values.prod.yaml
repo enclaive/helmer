@@ -1,0 +1,59 @@
+# Production-specific values with better resources and security
+namespace: emcp-prod
+replicaCount: 1
+
+image:
+  repository: mongo
+  tag: "5.0.20"  # Updated to latest 5.0.x patch
+  pullPolicy: IfNotPresent
+
+# Higher resources for production - better match for MongoDB needs
+resources:
+  limits:
+    cpu: 2000m     # 2 CPU cores
+    memory: 4Gi    # 4GB memory
+  requests:
+    cpu: 1000m     # 1 CPU core minimum
+    memory: 2Gi    # 2GB memory minimum
+
+# Use higher-quality storage for production
+persistence:
+  enabled: true
+  # Use a StorageClass with better durability if available in your cluster
+  # For AWS EKS, consider "gp3" or "io1" for better performance
+  storageClass: "gp3"  
+  size: "20Gi"     # 20GB for production data
+  accessMode: "ReadWriteOnce"
+
+# MongoDB configuration with larger cache
+mongodb:
+  config:
+    cacheSizeGB: 1.5  # Allocate more cache for better performance
+  port: 27017
+
+# More frequent backups for production
+backup:
+  enabled: true
+  schedule: "0 */6 * * *"  # Every 6 hours
+  retentionCount: 14      # Keep last 14 backups
+  database: backend_db
+  storageClass: "gp3"
+  storageSize: "40Gi"    # More space for production backups
+
+tolerations:
+- key: "CriticalAddonsOnly"
+  operator: "Exists"
+  effect: "NoSchedule"
+
+# Health check probes - more tolerant for production workloads
+probes:
+  liveness:
+    initialDelaySeconds: 90
+    periodSeconds: 20
+    timeoutSeconds: 10
+    failureThreshold: 6
+  readiness:
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3

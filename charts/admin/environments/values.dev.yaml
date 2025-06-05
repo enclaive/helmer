@@ -1,10 +1,8 @@
-    namespace: emcp-dev                                                           
-    domain: dev.emcp.admin.com                                                       
-    replicaCount: 1 # Fewer replicas in dev                                       
-                                                                                  
-    image:
-      repository: harbor.enclaive.cloud/emcp/admin
-      tag: "dev-latest"                                                           
-                                                                                  
-    persistence:                                                                  
-      size: 512Mi  # Smaller volume in dev 
+namespace: emcp-dev
+domain: dev.emcp.admin.com
+replicaCount: 1 # Fewer replicas in dev
+
+image:
+  repository: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.eu-central-1.amazonaws.com/emcp
+  tag: "dev"
+  pullPolicy: Always

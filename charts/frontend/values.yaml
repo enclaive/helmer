@@ -1,33 +1,44 @@
+# Updated ingress configuration for frontend values.yaml
+
 # Default values for frontend
 # This is a YAML-formatted file.
+
+# Environment-specific values should be defined in environments/[env].yaml
+namespace: default
+
+domain: console.enclaive.cloud
 
 replicaCount: 1
 
 image:
-  repository: harbor.enclaive.cloud/emcp/frontend
+  repository: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.eu-central-1.amazonaws.com/frontend
   tag: latest
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
 
 imagePullSecrets:
-  - name: harbor-creds
+  - name: aws-ecr-creds
 
 nameOverride: ""
 fullnameOverride: ""
 
-serviceAccount:
-  create: true
-  annotations: {}
-  name: ""
-
-podAnnotations: {}
-
-podSecurityContext: {}
-
-securityContext: {}
-
 service:
   type: ClusterIP
-  port: 80
+  port: 3000
+  targetPort: 3000
+
+# Enhanced ingress configuration
+ingress:
+  enabled: false  # Enable/disable ingress resource creation
+  className: "public"  # IngressClass to use
+  annotations: {}  # Custom annotations
+  certManager:
+    enabled: true
+    issuer: "letsencrypt"  # Certificate issuer
+  additionalHosts: []  # Additional hostnames to include
+  # Example for additional hosts:
+  # additionalHosts:
+  #   - govtech.enclaive.cloud
+  #   - prianto.enclaive.cloud
 
 resources:
   limits:
@@ -37,15 +48,46 @@ resources:
     cpu: 100m
     memory: 256Mi
 
+podAnnotations: {}
+
+podSecurityContext: {}
+
+securityContext: {}
+
 nodeSelector: {}
 
 tolerations: []
 
 affinity: {}
 
-persistence:
-  enabled: false
-  storageClass: "longhorn"
-  size: 5Gi
+# API endpoints configuration
+api:
+  url: "https://emcp-prod.enclaive.cloud"
 
-# Environment-specific configurations should be in environments/[env].yaml
+auth:
+  url: "https://auth.enclaive.cloud"
+
+app:
+  url: "https://console.enclaive.cloud"
+
+# Feature flags
+features:
+  enableAnalytics: true
+  enableHelpCenter: true
+  enableBetaFeatures: false
+
+# Default logging configuration
+logging:
+  level: "info"
+  format: "json"
+
+# Health check probes
+probes:
+  liveness:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    failureThreshold: 6
+  readiness:
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    failureThreshold: 3
