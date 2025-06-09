@@ -38,8 +38,8 @@ runs:
       with:
         version: 'v3.12.0'
           
-    - name: Create namespace
-      shell: bash
-      run: |
-        echo "Creating namespace ${{ inputs.namespace }} if it doesn't exist..."
-        kubectl create namespace ${{ inputs.namespace }} --dry-run=client -o yaml | kubectl apply -f -
+#    - name: Create namespace
+#      shell: bash
+#      run: |
+#        echo "Creating namespace ${{ inputs.namespace }} if it doesn't exist..."
+#        kubectl create namespace ${{ inputs.namespace }} --dry-run=client -o yaml | kubectl apply -f -
