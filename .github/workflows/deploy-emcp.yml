@@ -343,7 +343,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       AWS_REGION: eu-central-1
-      EKS_CLUSTER_NAME: ${{ needs.set-environment.outputs.eks_cluster_name }}
+      EKS_CLUSTER_NAME: ${{ secrets.DEV_EKS_CLUSTER_NAME }}
     
     steps:
       - name: Configure AWS credentials
