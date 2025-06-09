@@ -69,7 +69,6 @@ on:
         required: false
         default: false
         type: boolean
-
 jobs:
   set-environment:
     name: Set Environment
