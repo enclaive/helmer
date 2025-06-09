@@ -30,7 +30,7 @@ jobs:
     env:
       AWS_REGION: eu-central-1
       EKS_CLUSTER_NAME: enclaive-cluster
-      AWS_ACCOUNT_ID: ${{ env.AWS_ACCOUNT_ID }}
+      AWS_ACCOUNT_ID: ${{ env.aws_account_id }}
     
     steps:
       - name: Checkout code
