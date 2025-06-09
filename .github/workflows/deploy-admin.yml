@@ -29,6 +29,7 @@ jobs:
     if: ${{ !inputs.skip_deployment }}
     env:
       AWS_REGION: eu-central-1
+      EKS_CLUSTER_NAME: enclaive-cluster
       AWS_ACCOUNT_ID: ${{ inputs.aws_account_id }}
 
     steps:
@@ -41,7 +42,7 @@ jobs:
           aws-access-key: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-          eks-cluster: ${{ secrets.DEV_EKS_CLUSTER_NAME}}
+          eks-cluster: ${{ env.EKS_CLUSTER_NAME}}
           namespace: ${{ inputs.namespace }}
       
       - name: Create ECR pull credentials
