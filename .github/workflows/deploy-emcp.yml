@@ -4,24 +4,7 @@ on:
   push:
     branches: [ main, dev, staging ]
     paths:
-      - 'charts/admin/templates/**'
-      - 'charts/admin/Chart.yaml'
-      - 'charts/admin/values.yaml'
-      - 'charts/admin/environments/*.yaml'
-      - 'charts/backend/templates/**'
-      - 'charts/backend/Chart.yaml'
-      - 'charts/backend/values.yaml'
-      - 'charts/backend/environments/*.yaml'
-      - 'charts/frontend/templates/**'
-      - 'charts/frontend/Chart.yaml'
-      - 'charts/frontend/values.yaml'
-      - 'charts/frontend/environments/*.yaml'
-      - 'charts/redis/templates/**'
-      - 'charts/redis/Chart.yaml'
-      - 'charts/redis/values.yaml'
-      - 'charts/redis/environments/*.yaml'
-      - 'charts/mongo/**'
-      - 'charts/vhsm/**'
+      - 'charts/**'
       - '.github/workflows/**'
   workflow_dispatch:
     inputs:
@@ -101,11 +84,11 @@ jobs:
           
           # Set AWS account and cluster based on environment
           if [ "$ENVIRONMENT" == "prod" ]; then
-            AWS_ACCOUNT_ID="596861913968"
-            EKS_CLUSTER_NAME="enclaive-prod-cluster"
+            AWS_ACCOUNT_ID="${{ secrets.PROD_AWS_ACCOUNT_ID }}"
+            EKS_CLUSTER_NAME="${{ secrets.PROD_EKS_CLUSTER_NAME }}"
           else
-            AWS_ACCOUNT_ID="886093416603"
-            EKS_CLUSTER_NAME="enclaive-cluster"
+            AWS_ACCOUNT_ID="${{ secrets.DEV_AWS_ACCOUNT_ID }}"
+            EKS_CLUSTER_NAME="${{ secrets.DEV_EKS_CLUSTER_NAME }}"
           fi
           
           echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
@@ -360,7 +343,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       AWS_REGION: eu-central-1
-      EKS_CLUSTER_NAME: enclaive-cluster
+      EKS_CLUSTER_NAME: ${{ needs.set-environment.outputs.eks_cluster_name }}
     
     steps:
       - name: Configure AWS credentials
@@ -409,4 +392,3 @@ jobs:
           
           echo ""
           echo "=== DEPLOYMENT COMPLETE ==="
-          
