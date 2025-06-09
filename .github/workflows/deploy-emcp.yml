@@ -305,6 +305,7 @@ jobs:
       environment: ${{ needs.set-environment.outputs.environment }}
       namespace: ${{ needs.set-environment.outputs.namespace }}
       skip_deployment: ${{ github.event.inputs.deploy_admin == 'false' }}
+      aws_account_id: ${{ needs.set-environment.outputs.aws_account_id }}
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -325,6 +326,8 @@ jobs:
       environment: ${{ needs.set-environment.outputs.environment }}
       namespace: ${{ needs.set-environment.outputs.namespace }}
       skip_deployment: ${{ github.event.inputs.deploy_backend == 'false' }}
+      aws_account_id: ${{ needs.set-environment.outputs.aws_account_id }} 
+
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -345,6 +348,7 @@ jobs:
       environment: ${{ needs.set-environment.outputs.environment }}
       namespace: ${{ needs.set-environment.outputs.namespace }}
       skip_deployment: ${{ github.event.inputs.deploy_frontend == 'false' }}
+      aws_account_id: ${{ needs.set-environment.outputs.aws_account_id }}
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

@@ -31,9 +31,8 @@ jobs:
     if: ${{ !inputs.skip_deployment }}
     env:
       AWS_REGION: eu-central-1
-      EKS_CLUSTER_NAME: enclaive-cluster
-      AWS_ACCOUNT_ID: ${{ inputs.aws_account_id }}
-    
+      EKS_CLUSTER_NAME: enclaive-cluster    
+      AWS_ACCOUNT_ID: ${{ env.AWS_ACCOUNT_ID }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3

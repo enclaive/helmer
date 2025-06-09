@@ -41,51 +41,6 @@ jobs:
           eks-cluster: ${{ env.EKS_CLUSTER_NAME }}
           namespace: ${{ inputs.namespace }}
       
-      - name: Create EBS CSI Storage Classes
-        run: |
-          # Create gp3-immediate storage class to avoid topology issues
-          cat <<EOF | kubectl apply -f -
-          apiVersion: storage.k8s.io/v1
-          kind: StorageClass
-          metadata:
-            name: gp3-immediate
-            annotations:
-              storageclass.kubernetes.io/is-default-class: "false"
-          provisioner: ebs.csi.aws.com
-          parameters:
-            type: gp3
-            fsType: ext4
-          reclaimPolicy: Delete
-          volumeBindingMode: Immediate
-          allowVolumeExpansion: true
-          allowedTopologies:
-          - matchLabelExpressions:
-            - key: topology.ebs.csi.aws.com/zone
-              values:
-              - eu-central-1a
-              - eu-central-1b
-              - eu-central-1c
-          EOF
-          
-          # Keep the original gp3 storage class as well
-          cat <<EOF | kubectl apply -f -
-          apiVersion: storage.k8s.io/v1
-          kind: StorageClass
-          metadata:
-            name: gp3
-            annotations:
-              storageclass.kubernetes.io/is-default-class: "true"
-          provisioner: ebs.csi.aws.com
-          parameters:
-            type: gp3
-            fsType: ext4
-          reclaimPolicy: Delete
-          volumeBindingMode: WaitForFirstConsumer
-          allowVolumeExpansion: true
-          EOF
-          
-          echo "Created/updated storage classes"
-      
       - name: Deploy Redis
         uses: ./.github/actions/deploy-helm-chart
         with:
@@ -97,7 +52,7 @@ jobs:
           image-repository: redis
           image-tag: 6.2-alpine
           # Use the immediate binding storage class
-          additional-set-values: --set persistence.storageClass="gp3-immediate"
+          additional-set-values: --set persistence.storageClass="gp3"
           timeout: 10m
       
       - name: Report Redis deployment status
@@ -112,5 +67,4 @@ jobs:
           kubectl get pvc -n $NAMESPACE -l app=redis || echo "No PVCs found"
           
           echo "=== Storage Class Information ==="
-          kubectl get storageclass gp3-immediate || echo "Immediate storage class not found"
           kubectl get storageclass gp3 || echo "WaitForFirstConsumer storage class not found"
