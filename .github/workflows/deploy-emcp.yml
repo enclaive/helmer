@@ -267,6 +267,7 @@ jobs:
       environment: ${{ needs.set-environment.outputs.environment }}
       namespace: ${{ needs.set-environment.outputs.vhsm_namespace }}
       skip_deployment: ${{ github.event.inputs.deploy_vhsm == 'false' }}
+      aws_account_id: ${{ needs.set-environment.outputs.aws_account_id }}  # first error resolution      
       
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
