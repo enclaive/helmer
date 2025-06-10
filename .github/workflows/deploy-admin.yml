@@ -13,13 +13,12 @@ on:
         required: false
         type: boolean
         default: false
-      aws_account_id:
-        required: true
-        type: string
     secrets:
       AWS_ACCESS_KEY_ID:
         required: true
       AWS_SECRET_ACCESS_KEY:
+        required: true
+      AWS_ACCOUNT_ID:
         required: true
 
 jobs:
@@ -30,7 +29,6 @@ jobs:
     env:
       AWS_REGION: eu-central-1
       EKS_CLUSTER_NAME: enclaive-cluster
-      AWS_ACCOUNT_ID: ${{ inputs.aws_account_id }}
 
     steps:
       - name: Checkout code
@@ -49,7 +47,7 @@ jobs:
         uses: ./.github/actions/create-ecr-credentials
         with:
           aws-region: ${{ env.AWS_REGION }}
-          aws-account-id: ${{ env.AWS_ACCOUNT_ID }}
+          aws-account-id: ${{ secrets.AWS_ACCOUNT_ID }}
           namespace: ${{ inputs.namespace }}
           secret-name: aws-ecr-creds
       
@@ -68,7 +66,7 @@ jobs:
           fi
           
           # Full ECR image path
-          ECR_IMAGE="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/admin:${TAG}"
+          ECR_IMAGE="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/admin:${TAG}"
           
           echo "admin_tag=$TAG" >> $GITHUB_OUTPUT
           echo "admin_image=$ECR_IMAGE" >> $GITHUB_OUTPUT
@@ -105,7 +103,7 @@ jobs:
           values-file: ./charts/admin/environments/values.${{ inputs.environment }}.yaml
           namespace: ${{ inputs.namespace }}
           environment: ${{ inputs.environment }}
-          image-repository: "${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/admin"
+          image-repository: "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/admin"
           image-tag: ${{ steps.set-tag.outputs.admin_tag }}
           additional-set-values: >-
             --set namespace=${{ inputs.namespace }}
