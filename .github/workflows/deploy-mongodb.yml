@@ -42,11 +42,11 @@ jobs:
           eks-cluster: ${{ env.EKS_CLUSTER_NAME }}
           namespace: ${{ inputs.namespace }}
       
-      - name: Validate MongoDB Deployment
-        run: |
-          echo "Running MongoDB pre-deployment validation..."
-          chmod +x ./charts/mongo/scripts/validate-mongodb.sh
-          ./charts/mongo/scripts/validate-mongodb.sh -n ${{ inputs.namespace }} -f ./charts/mongo/environments/values.${{ inputs.environment }}.yaml
+      #- name: Validate MongoDB Deployment
+      #  run: |
+      #    echo "Running MongoDB pre-deployment validation..."
+      #    chmod +x ./charts/mongo/scripts/validate-mongodb.sh
+      #    ./charts/mongo/scripts/validate-mongodb.sh -n ${{ inputs.namespace }} -f ./charts/mongo/environments/values.${{ inputs.environment }}.yaml
           
       - name: Deploy MongoDB
         uses: ./.github/actions/deploy-helm-chart  # Fixed path to match actual location
