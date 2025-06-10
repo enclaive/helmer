@@ -13,14 +13,15 @@ on:
         required: false
         type: boolean
         default: false
+      aws_account_id:
+        required: true
+        type: string
     secrets:
       AWS_ACCESS_KEY_ID:
         required: true
       AWS_SECRET_ACCESS_KEY:
         required: true
       VHSM_LICENCE:
-        required: true
-      AWS_ACCOUNT_ID:
         required: true
 
 jobs:
@@ -30,7 +31,9 @@ jobs:
     if: ${{ !inputs.skip_deployment }}
     env:
       AWS_REGION: eu-central-1
-      EKS_CLUSTER_NAME: enclaive-cluster    
+      EKS_CLUSTER_NAME: enclaive-cluster
+      AWS_ACCOUNT_ID: ${{ inputs.aws_account_id }}
+         
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -48,7 +51,7 @@ jobs:
         uses: ./.github/actions/create-ecr-credentials
         with:
           aws-region: ${{ env.AWS_REGION }}
-          aws-account-id: ${{ secrets.AWS_ACCOUNT_ID }}
+          aws-account-id: ${{ env.AWS_ACCOUNT_ID }}
           namespace: ${{ inputs.namespace }}
           secret-name: aws-ecr-creds
       
@@ -76,7 +79,7 @@ jobs:
           fi
           
           # Full ECR image path
-          ECR_IMAGE="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/vhsm:${TAG}"
+          ECR_IMAGE="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/vhsm:${TAG}"
           
           echo "vhsm_tag=$TAG" >> $GITHUB_OUTPUT
           echo "vhsm_image=$ECR_IMAGE" >> $GITHUB_OUTPUT
@@ -104,7 +107,7 @@ jobs:
         working-directory: ./charts/vhsm/${{ inputs.environment }}
         run: |
           # Override image settings for ECR
-          export VHSM_IMAGE_REPOSITORY="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/vhsm"
+          export VHSM_IMAGE_REPOSITORY="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/vhsm"
           export VHSM_IMAGE_TAG="${{ steps.set-tag.outputs.vhsm_tag }}"
           
           # Use sync instead of apply to avoid diff issues, or use --skip-diff-on-install

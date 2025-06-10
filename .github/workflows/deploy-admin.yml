@@ -18,8 +18,7 @@ on:
         required: true
       AWS_SECRET_ACCESS_KEY:
         required: true
-      AWS_ACCOUNT_ID:
-        required: true
+
 
 jobs:
   deploy-admin:
@@ -29,6 +28,7 @@ jobs:
     env:
       AWS_REGION: eu-central-1
       EKS_CLUSTER_NAME: enclaive-cluster
+      AWS_ACCOUNT_ID: ${{ env.AWS_ACCOUNT_ID }}
 
     steps:
       - name: Checkout code
@@ -40,14 +40,14 @@ jobs:
           aws-access-key: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-          eks-cluster: ${{ env.EKS_CLUSTER_NAME}}
+          eks-cluster: ${{ env.EKS_CLUSTER_NAME }}
           namespace: ${{ inputs.namespace }}
       
       - name: Create ECR pull credentials
         uses: ./.github/actions/create-ecr-credentials
         with:
           aws-region: ${{ env.AWS_REGION }}
-          aws-account-id: ${{ secrets.AWS_ACCOUNT_ID }}
+          aws-account-id: ${{ env.AWS_ACCOUNT_ID }}
           namespace: ${{ inputs.namespace }}
           secret-name: aws-ecr-creds
       
@@ -66,8 +66,7 @@ jobs:
           fi
           
           # Full ECR image path
-          ECR_IMAGE="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/admin:${TAG}"
-          
+          ECR_IMAGE="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/admin:${TAG}"
           echo "admin_tag=$TAG" >> $GITHUB_OUTPUT
           echo "admin_image=$ECR_IMAGE" >> $GITHUB_OUTPUT
           echo "ADMIN_TAG=$TAG" >> $GITHUB_ENV
@@ -103,7 +102,7 @@ jobs:
           values-file: ./charts/admin/environments/values.${{ inputs.environment }}.yaml
           namespace: ${{ inputs.namespace }}
           environment: ${{ inputs.environment }}
-          image-repository: "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/admin"
+          image-repository: "${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/admin"
           image-tag: ${{ steps.set-tag.outputs.admin_tag }}
           additional-set-values: >-
             --set namespace=${{ inputs.namespace }}

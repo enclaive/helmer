@@ -9,7 +9,7 @@ releases:
 
     - server:
         image:
-          repository: harbor.enclaive.cloud/vhsm/vhsm
+          repository: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.eu-central-1.amazonaws.com/vhsm
           tag: dev
           pullPolicy: Always
 

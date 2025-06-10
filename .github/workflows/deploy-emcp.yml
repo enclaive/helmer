@@ -84,11 +84,11 @@ jobs:
           
           # Set AWS account and cluster based on environment
           if [ "$ENVIRONMENT" == "prod" ]; then
-            AWS_ACCOUNT_ID="${{ secrets.PROD_AWS_ACCOUNT_ID }}"
-            EKS_CLUSTER_NAME="${{ secrets.PROD_EKS_CLUSTER_NAME }}"
+            AWS_ACCOUNT_ID="596861913968"
+            EKS_CLUSTER_NAME="enclaive-prod-cluster"
           else
-            AWS_ACCOUNT_ID="${{ secrets.DEV_AWS_ACCOUNT_ID }}"
-            EKS_CLUSTER_NAME="${{ secrets.DEV_EKS_CLUSTER_NAME }}"
+            AWS_ACCOUNT_ID="886093416603"
+            EKS_CLUSTER_NAME="enclaive-cluster"
           fi
           
           echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
@@ -267,11 +267,11 @@ jobs:
       environment: ${{ needs.set-environment.outputs.environment }}
       namespace: ${{ needs.set-environment.outputs.vhsm_namespace }}
       skip_deployment: ${{ github.event.inputs.deploy_vhsm == 'false' }}
+      
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       VHSM_LICENCE: ${{ secrets.VHSM_LICENCE }}
-      AWS_ACCOUNT_ID: ${{ secrets.DEV_AWS_ACCOUNT_ID}}
 
   deploy-admin:
     name: Deploy Admin to EKS
@@ -291,9 +291,6 @@ jobs:
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_ACCOUNT_ID: ${{ secrets.DEV_AWS_ACCOUNT_ID}}
-
-      
 
   deploy-backend:
     name: Deploy Backend to EKS
@@ -311,12 +308,9 @@ jobs:
       environment: ${{ needs.set-environment.outputs.environment }}
       namespace: ${{ needs.set-environment.outputs.namespace }}
       skip_deployment: ${{ github.event.inputs.deploy_backend == 'false' }}
-       
-
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_ACCOUNT_ID: ${{ secrets.DEV_AWS_ACCOUNT_ID}}
 
   deploy-frontend:
     name: Deploy Frontend to EKS
@@ -334,7 +328,6 @@ jobs:
       environment: ${{ needs.set-environment.outputs.environment }}
       namespace: ${{ needs.set-environment.outputs.namespace }}
       skip_deployment: ${{ github.event.inputs.deploy_frontend == 'false' }}
-      aws_account_id: ${{ needs.set-environment.outputs.aws_account_id }}
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -346,7 +339,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       AWS_REGION: eu-central-1
-      EKS_CLUSTER_NAME: ${{ secrets.DEV_EKS_CLUSTER_NAME }}
+      EKS_CLUSTER_NAME: enclaive-cluster
     
     steps:
       - name: Configure AWS credentials
