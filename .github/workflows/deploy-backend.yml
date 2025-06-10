@@ -13,6 +13,9 @@ on:
         required: false
         type: boolean
         default: false
+      aws_account_id:
+        required: true
+        type: string
     secrets:
       AWS_ACCESS_KEY_ID:
         required: true
@@ -28,7 +31,7 @@ jobs:
     env:
       AWS_REGION: eu-central-1
       EKS_CLUSTER_NAME: enclaive-cluster
-      AWS_ACCOUNT_ID: ${{ env.AWS_ACCOUNT_ID }}
+      AWS_ACCOUNT_ID: ${{ inputs.aws_account_id }}
     
     steps:
       - name: Checkout code
