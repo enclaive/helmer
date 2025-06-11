@@ -6,7 +6,7 @@ accounts:
     cluster_name: enclaive-prod-cluster
   
   test:
-    account_id: ${{ env.AWS_ACCOUNT_ID }}
+    account_id: 886093416603
     region: eu-central-1
     cluster_name: enclaive-cluster
 

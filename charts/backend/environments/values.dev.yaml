@@ -4,7 +4,7 @@ replicaCount: 1
 
 # Image configuration
 image:
-  repository: 886093416603.dkr.ecr.eu-central-1.amazonaws.com/backend0-fghfgh
+  repository: 886093416603.dkr.ecr.eu-central-1.amazonaws.com/backend0
   tag: dev
   pullPolicy: Always
 

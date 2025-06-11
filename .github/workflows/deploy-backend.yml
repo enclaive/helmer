@@ -69,7 +69,7 @@ jobs:
           fi
           ACCOUNT_ID="${{ env.AWS_ACCOUNT_ID }}"
           # Full ECR image path
-          ECR_IMAGE="$${{ inputs.aws_account_id }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/backend0:xyzxyz"
+          ECR_IMAGE="$${{ inputs.aws_account_id }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/backend0:${TAG}"
           
           echo "backend_tag=$TAG" >> $GITHUB_OUTPUT
           echo "backend_image=$ECR_IMAGE" >> $GITHUB_OUTPUT
@@ -107,7 +107,7 @@ jobs:
           namespace: ${{ inputs.namespace }}
           environment: ${{ inputs.environment }}
           image-repository: "${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/backend0"
-          image-tag: "abcabc"
+          image-tag: ${{ steps.set-tag.outputs.backend_tag }}
           additional-set-values: >-
             --set namespace=${{ inputs.namespace }}
             --set environment=${{ inputs.environment }}
