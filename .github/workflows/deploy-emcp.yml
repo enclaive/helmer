@@ -19,8 +19,8 @@ on:
           - prod
       deploy_admin:
         description: 'Deploy admin service'
-        required: false
-        default: false
+        required: true
+        default: true
         type: boolean
       deploy_backend:
         description: 'Deploy backend service'
