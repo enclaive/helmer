@@ -34,13 +34,13 @@ on:
         type: boolean
       deploy_redis:
         description: 'Deploy redis service'
-        required: false
-        default: false
+        required: true
+        default: true
         type: boolean
       deploy_mongodb:
         description: 'Deploy mongodb service'
-        required: false
-        default: false
+        required: true
+        default: true
         type: boolean
       deploy_vhsm:
         description: 'Deploy VHSM service'
