@@ -18,6 +18,7 @@ spec:
     metadata:
       labels:
         app: backend
+        {{- include "backend.labels" . | nindent 4 }}
     spec:
       imagePullSecrets:
         {{- toYaml .Values.imagePullSecrets | nindent 8 }}
@@ -25,26 +26,32 @@ spec:
         - name: backend
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          tty: true
+          stdin: true
           env:
-            - name: NODE_ENV
-              value: {{ .Values.environment | default "production" }}
-            - name: MONGODB_DATABASE
-              value: {{ .Values.mongodb.database | default "backend_db" }}
-            - name: MONGODB_HOST
-              value: {{ .Values.mongodb.host | default "mongodb" }}
-            - name: MONGODB_PORT
-              value: {{ .Values.mongodb.port | default "27017" | quote }}
-            - name: MONGODB_USER
-              value: {{ .Values.mongodb.username | default "root" }}
-            - name: MONGODB_PASSWORD
-              value: {{ .Values.mongodb.password | default "root" }}
-            - name: REDIS_HOST
-              value: {{ .Values.redis.host | default "redis" }}
-            - name: REDIS_PORT
-              value: {{ .Values.redis.port | default "6379" | quote }}
+            {{- include "backend.envVars" . | nindent 12 }}
           ports:
-            - containerPort: 8080
+            - containerPort: {{ .Values.service.port }}
               name: web
               protocol: TCP
+          volumeMounts:
+            {{- range .Values.persistence.mountPaths }}
+            - name: backend
+              subPath: {{ .subPath }}
+              mountPath: {{ .path }}
+            {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: backend-jwks-keys
+          configMap:
+            name: backend-jwks-keys
+  volumeClaimTemplates:
+  - metadata:
+      name: backend
+    spec:
+      storageClassName: {{ .Values.persistence.storageClass | quote }}
+      accessModes: {{ toYaml .Values.persistence.accessModes | nindent 8 }}
+      resources:
+        requests:
+          storage: {{ .Values.persistence.size }}

@@ -47,3 +47,43 @@ Selector labels
 app.kubernetes.io/name: {{ include "backend.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{- define "backend.secretName" -}}
+{{- if .Values.existingSecret }}
+{{- .Values.existingSecret }}
+{{- else }}
+secrets
+{{- end }}
+{{- end }}
+
+{{- define "backend.envVars" -}}
+{{- $secretName := include "backend.secretName" . }}
+{{- $envs := dict }}
+
+{{- /* Collect plain env vars */}}
+{{- range $key, $value := .Values.env }}
+  {{- $_ := set $envs $key dict "name" $key "value" $value "secret" false }}
+{{- end }}
+
+{{- /* Collect secret env vars */}}
+{{- range $key, $_ := .Values.secretEnv }}
+  {{- $_ := set $envs $key dict "name" $key "secret" true "secretName" $secretName "key" $key }}
+{{- end }}
+
+{{- /* Sort keys for consistent output */}}
+{{- $sortedKeys := sort (keys $envs) }}
+
+{{- /* Render env vars in alphabetical order */}}
+{{- range $key := $sortedKeys }}
+  {{- $item := index $envs $key }}
+- name: {{ $item.name }}
+  {{- if $item.secret }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ $item.secretName }}
+      key: {{ $item.key }}
+  {{- else }}
+  value: {{ $item.value | quote }}
+  {{- end }}
+{{- end }}
+{{- end }}
