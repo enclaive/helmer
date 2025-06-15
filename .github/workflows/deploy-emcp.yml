@@ -297,14 +297,14 @@ jobs:
   deploy-backend:
     name: Deploy Backend to EKS
     needs: [set-environment, check-changes, deploy-redis, deploy-mongodb, deploy-admin]
-    #if: |
-    #  always() && 
-    #  needs.deploy-redis.result != 'skipped' &&
-    #  needs.deploy-mongodb.result != 'skipped' &&
-    #  (needs.check-changes.outputs.backend_changed == 'true' || 
-    #   (needs.check-changes.outputs.workflow_changed == 'true' && 
-    #    (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_backend == 'true'))) &&
-    #  (github.event_name != 'workflow_dispatch' || github.event.inputs.check_redis_only != 'true')
+    if: |
+      always() && 
+      needs.deploy-redis.result != 'skipped' &&
+      needs.deploy-mongodb.result != 'skipped' &&
+      (needs.check-changes.outputs.backend_changed == 'true' || 
+       (needs.check-changes.outputs.workflow_changed == 'true' && 
+        (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_backend == 'true'))) &&
+      (github.event_name != 'workflow_dispatch' || github.event.inputs.check_redis_only != 'true')
     uses: ./.github/workflows/deploy-backend.yml
     with:
       environment: ${{ needs.set-environment.outputs.environment }}
