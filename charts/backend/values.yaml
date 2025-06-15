@@ -104,6 +104,7 @@ env:
   TERRAFORM_BACKEND_REGION: eu-west-1
   TERRAFORM_BACKEND_BUCKET: staging-terraform-backend2
   TERRAFORM_BACKEND_DYNAMODB: staging-terraform-backend-locking
+  CLOUDFLARE_ZONE_ID: a153b156328f4327226bbcc85f7d1544
   TOKEN_AUDIENCE: enclaive-keystore
   TOKEN_ISSUANCE: enclaive-console
   TOKEN_SUBJECT: enclaive-customer
@@ -118,7 +119,6 @@ secretEnv:
   AZURE_TENANT_ID: ""
   BULL_DASHBOARD_ADMIN_PASSWORD: ""
   CLOUDFLARE_API_TOKEN: ""
-  CLOUDFLARE_ZONE_ID: ""
   ENCRYPT_SECRET_IV: ""
   ENCRYPT_SECRET_KEY: ""
   GCP_COST_TABLE: ""
