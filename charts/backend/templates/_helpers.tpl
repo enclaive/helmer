@@ -62,14 +62,13 @@ secrets
 
 {{- /* Collect plain env vars */}}
 {{- range $key, $value := .Values.env }}
-  {{- $_ := set $envs $key dict "name" $key "value" $value "secret" false }}
+  {{- $_ := set $envs $key (dict "name" $key "value" $value "secret" false) }}
 {{- end }}
 
 {{- /* Collect secret env vars */}}
 {{- range $key, $_ := .Values.secretEnv }}
-  {{- $_ := set $envs $key dict "name" $key "secret" true "secretName" $secretName "key" $key }}
+  {{- $_ := set $envs $key (dict "name" $key "secret" true "secretName" $secretName "key" $key) }}
 {{- end }}
-
 
 {{- range $key, $item := $envs }}
 - name: {{ $item.name }}
@@ -81,4 +80,5 @@ secrets
   {{- else }}
   value: {{ $item.value | quote }}
   {{- end }}
+{{- end }}
 {{- end }}

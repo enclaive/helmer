@@ -25,7 +25,7 @@ data:
       },
       "database": {
         "mongodb": {
-          "uri": "mongodb://{{ .Values.mongodb.username }}:{{ .Values.mongodb.password }}@{{ .Values.mongodb.host }}:{{ .Values.mongodb.port }}/{{ .Values.mongodb.database }}",
+          "uri": "mongodb://{{ .Values.env.MONGODB_USER }}:{{ .Values.env.MONGODB_PASSWORD }}@{{ .Values.env.MONGODB_HOST }}:{{ .Values.env.MONGODB_PORT }}/{{ .Values.env.MONGODB_DATABASE }}",
           "options": {
             "useNewUrlParser": true,
             "useUnifiedTopology": true,
@@ -34,8 +34,8 @@ data:
           }
         },
         "redis": {
-          "host": "{{ .Values.redis.host }}",
-          "port": {{ .Values.redis.port }}
+          "host": "{{ .Values.env.REDIS_HOST }}",
+          "port": {{ .Values.env.REDIS_PORT }}
         }
       },
       "security": {
