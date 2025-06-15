@@ -70,12 +70,8 @@ secrets
   {{- $_ := set $envs $key dict "name" $key "secret" true "secretName" $secretName "key" $key }}
 {{- end }}
 
-{{- /* Sort keys for consistent output */}}
-{{- $sortedKeys := sort (keys $envs) }}
 
-{{- /* Render env vars in alphabetical order */}}
-{{- range $key := $sortedKeys }}
-  {{- $item := index $envs $key }}
+{{- range $key, $item := $envs }}
 - name: {{ $item.name }}
   {{- if $item.secret }}
   valueFrom:
@@ -85,5 +81,4 @@ secrets
   {{- else }}
   value: {{ $item.value | quote }}
   {{- end }}
-{{- end }}
 {{- end }}
