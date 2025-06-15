@@ -110,6 +110,7 @@ env:
   TOKEN_SUBJECT: enclaive-customer
   VAULT_API_URL: https://vhsm-staging.enclaive.cloud
   VAULT_API_ADMIN_USERNAME: emcp
+  STRIPE_ACCOUNT_TAX_ID: txi_1OgqnKJ6AR0K9Z7WPe78Vpj8
 secretEnv:
   AWS_ACCESS_KEY: ""
   AWS_SECRET_KEY: ""
@@ -135,7 +136,6 @@ secretEnv:
   SENDGRID_API_KEY: ""
   SENTRY_DSN: ""
   SMTP_PWD: ""
-  STRIPE_ACCOUNT_TAX_ID: ""
   STRIPE_SECRET_KEY: ""
   STRIPE_WEBHOOK_KEY: ""
   TERRAFORM_BACKEND_ACCESS_KEY: ""
