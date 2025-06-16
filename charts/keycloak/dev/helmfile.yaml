@@ -32,6 +32,7 @@ releases:
           tls: true
 
         image:
+          registry: ""
           repository: ""
           tag: ""
           pullPolicy: IfNotPresent
