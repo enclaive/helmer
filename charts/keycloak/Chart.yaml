@@ -1,0 +1,11 @@
+apiVersion: v2
+name: keycloak
+description: Deploys Keycloak using Bitnami chart with custom email/event providers
+type: application
+version: 0.1.0
+
+# Reference to upstream Bitnami chart version
+dependencies:
+  - name: keycloak
+    version: 24.4.6
+    repository: oci://registry-1.docker.io/bitnamicharts

@@ -31,7 +31,7 @@ redis:
 persistence:
   enabled: true
   # Use gp3-immediate to avoid topology issues
-  storageClass: "gp3-immediate"
+  storageClass: "gp3"
   size: "512Mi"
   accessMode: "ReadWriteOnce"
 

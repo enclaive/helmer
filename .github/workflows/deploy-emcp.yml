@@ -47,6 +47,11 @@ on:
         required: false
         default: false
         type: boolean
+      deploy_keycloak:
+        description: 'Deploy Keycloak service'
+        required: false
+        default: false
+        type: boolean
       check_redis_only:
         description: 'Only check if Redis exists without redeploying'
         required: false
@@ -112,6 +117,7 @@ jobs:
       redis_changed: ${{ steps.check-folders.outputs.redis_changed }}
       mongodb_changed: ${{ steps.check-folders.outputs.mongodb_changed }}
       vhsm_changed: ${{ steps.check-folders.outputs.vhsm_changed }}
+      keycloak_changed: ${{ steps.check-folders.outputs.keycloak_changed }}
       workflow_changed: ${{ steps.check-folders.outputs.workflow_changed }}
     
     steps:
@@ -133,6 +139,7 @@ jobs:
               echo "redis_changed=false" >> $GITHUB_OUTPUT
               echo "mongodb_changed=false" >> $GITHUB_OUTPUT
               echo "vhsm_changed=false" >> $GITHUB_OUTPUT
+              echo "keycloak_changed=false" >> $GITHUB_OUTPUT
               echo "workflow_changed=true" >> $GITHUB_OUTPUT
             else
               echo "admin_changed=${{ github.event.inputs.deploy_admin }}" >> $GITHUB_OUTPUT
@@ -141,6 +148,7 @@ jobs:
               echo "redis_changed=${{ github.event.inputs.deploy_redis }}" >> $GITHUB_OUTPUT
               echo "mongodb_changed=${{ github.event.inputs.deploy_mongodb }}" >> $GITHUB_OUTPUT
               echo "vhsm_changed=${{ github.event.inputs.deploy_vhsm }}" >> $GITHUB_OUTPUT
+              echo "keycloak_changed=${{ github.event.inputs.deploy_keycloak }}" >> $GITHUB_OUTPUT
               echo "workflow_changed=true" >> $GITHUB_OUTPUT
             fi
             exit 0
@@ -160,6 +168,7 @@ jobs:
           REDIS_CHANGED="false"
           MONGODB_CHANGED="false"
           VHSM_CHANGED="false"
+          KEYCLOAK_CHANGED="false"
           WORKFLOW_CHANGED="false"
           
           # Check if specific folders were modified with precise targeting
@@ -202,6 +211,11 @@ jobs:
             echo "VHSM service files changed"
             VHSM_CHANGED="true"
           fi
+
+          if echo "$CHANGED_FILES" | grep -q "^charts/keycloak/"; then
+            echo "KEYCLOAK service files changed"
+            KEYCLOAK_CHANGED="true"
+          fi
           
           # Check if workflow files changed
           if echo "$CHANGED_FILES" | grep -E -q "^\.github/workflows/(deploy-emcp\.yml|deploy-mongodb\.yml|deploy-vhsm\.yml|k8s/(common|dev|staging|prod)\.sh)"; then
@@ -216,6 +230,7 @@ jobs:
           echo "redis_changed=${REDIS_CHANGED}" >> $GITHUB_OUTPUT
           echo "mongodb_changed=${MONGODB_CHANGED}" >> $GITHUB_OUTPUT
           echo "vhsm_changed=${VHSM_CHANGED}" >> $GITHUB_OUTPUT
+          echo "keycloak_changed=${KEYCLOAK_CHANGED}" >> $GITHUB_OUTPUT
           echo "workflow_changed=${WORKFLOW_CHANGED}" >> $GITHUB_OUTPUT
 
   deploy-redis:
@@ -336,6 +351,27 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
+  deploy-keycloak:
+    name: Deploy Keycloak to EKS
+    needs: [set-environment, check-changes]
+    if: |
+      always() && 
+      (needs.check-changes.outputs.keycloak_changed == 'true' || 
+       (needs.check-changes.outputs.workflow_changed == 'true' && 
+        (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_vhsm == 'true'))) &&
+      (github.event_name != 'workflow_dispatch' || github.event.inputs.check_redis_only != 'true')
+    uses: ./.github/workflows/deploy-keycloak.yml
+    with:
+      environment: ${{ needs.set-environment.outputs.environment }}
+      namespace: ${{ needs.set-environment.outputs.vhsm_namespace }}
+      skip_deployment: ${{ github.event.inputs.deploy_keycloak == 'false' }}
+      aws_account_id: ${{ needs.set-environment.outputs.aws_account_id }}  # first error resolution      
+      
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+
   deployment-summary:
     name: Deployment Summary
     needs: [set-environment, deploy-redis, deploy-mongodb, deploy-vhsm, deploy-admin, deploy-backend, deploy-frontend]
@@ -372,6 +408,7 @@ jobs:
           echo "Admin: ${{ needs.deploy-admin.result }}"
           echo "Backend: ${{ needs.deploy-backend.result }}"
           echo "Frontend: ${{ needs.deploy-frontend.result }}"
+          echo "Keycloak: ${{ needs.deploy-keycloak.result }}"
           echo ""
           
           echo "=== SERVICE STATUS ==="
@@ -381,6 +418,8 @@ jobs:
           echo "ADMIN: $(kubectl get statefulset admin -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not deployed')"
           echo "BACKEND: $(kubectl get statefulset backend -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not deployed')"
           echo "FRONTEND: $(kubectl get deployment frontend -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not deployed')"
+          echo "KEYCLOAK: $(kubectl get statefulset emcp-dev-keycloak -n $NAMESPACE -o jsonpath='{.status.readyReplicas}/{.status.replicas}' 2>/dev/null || echo 'Not deployed')"
+
           echo ""
           
           echo "=== POD STATUS ($NAMESPACE) ==="

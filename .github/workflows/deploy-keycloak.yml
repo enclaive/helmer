@@ -1,0 +1,130 @@
+name: Deploy Keycloak Service
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      namespace:
+        required: true
+        type: string
+      skip_deployment:
+        required: false
+        type: boolean
+        default: false
+      aws_account_id:
+        required: true
+        type: string
+    secrets:
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+
+jobs:
+  deploy-keycloak:
+    name: Deploy Keycloak
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.skip_deployment }}
+    env:
+      AWS_REGION: eu-central-1
+      EKS_CLUSTER_NAME: enclaive-cluster
+      AWS_ACCOUNT_ID: ${{ inputs.aws_account_id }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup EKS
+        uses: ./.github/actions/setup-eks
+        with:
+          aws-access-key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          eks-cluster: ${{ env.EKS_CLUSTER_NAME }}
+          namespace: ${{ inputs.namespace }}
+
+      - name: Create ECR pull credentials
+        uses: ./.github/actions/create-ecr-credentials
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          aws-account-id: ${{ env.AWS_ACCOUNT_ID }}
+          namespace: ${{ inputs.namespace }}
+          secret-name: aws-ecr-creds
+
+      - name: Deploy CNPG Cluster and Backups
+        run: |
+          echo "Applying CNPG cluster and backups for Keycloak..."
+
+          kubectl apply -f charts/keycloak/k8s/dev/keycloakCNPGCluster.yaml 
+          kubectl apply -f charts/keycloak/k8s/dev/keycloakCNPGClusterInstantBackup.yaml 
+          kubectl apply -f charts/keycloak/k8s/dev/keycloakCNPGClusterScheduledBackup.yaml
+
+          echo " CNPG Cluster and backup resources applied"
+      - name: Set Keycloak image tag
+        id: set-tag
+        run: |
+          ENV="${{ inputs.environment }}"
+          
+          # Use simple tag names
+          if [ "$ENV" == "prod" ]; then
+            TAG="prod"
+          elif [ "$ENV" == "staging" ]; then
+            TAG="staging"
+          elif [ "$ENV" == "dev" ]; then
+            TAG="dev"
+          fi
+          
+          # Full ECR image path
+          ECR_IMAGE="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/kc-provider:${TAG}"
+          echo "keycloak_tag=$TAG" >> $GITHUB_OUTPUT
+          echo "keycloak_image=$ECR_IMAGE" >> $GITHUB_OUTPUT
+          echo "KEYCLOAK_TAG=$TAG" >> $GITHUB_ENV
+          echo "KEYCLOAK_IMAGE=$ECR_IMAGE" >> $GITHUB_ENV
+          
+          echo "Using image: $ECR_IMAGE"
+
+      - name: Determine log settings
+        id: log-settings
+        run: |
+          ENV="${{ inputs.environment }}"
+          
+          # Determine log level based on environment
+          if [ "$ENV" == "prod" ]; then
+            LOG_LEVEL="info"
+            LOG_FORMAT="json"
+          elif [ "$ENV" == "staging" ]; then
+            LOG_LEVEL="info"
+            LOG_FORMAT="json"
+          else
+            LOG_LEVEL="debug"
+            LOG_FORMAT="pretty"
+          fi
+          
+          echo "log_level=$LOG_LEVEL" >> $GITHUB_OUTPUT
+          echo "log_format=$LOG_FORMAT" >> $GITHUB_OUTPUT
+
+      - name: Deploy Keycloak using Helm
+        uses: ./.github/actions/deploy-helm-chart
+        with:
+          service-name: keycloak
+          chart-path: ./charts/keycloak
+          values-file: ./charts/keycloak/environments/values.${{ inputs.environment }}.yaml
+          namespace: ${{ inputs.namespace }}
+          environment: ${{ inputs.environment }}
+          image-repository: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/kc-provider
+          image-tag: ${{ steps.set-tag.outputs.keycloak_tag }}
+          additional-set-values: >-
+            --set namespace=${{ inputs.namespace }}
+            --set environment=${{ inputs.environment }}
+            --set logging.level=${{ steps.log-settings.outputs.log_level }}
+            --set logging.format=${{ steps.log-settings.outputs.log_format }}
+          timeout: 10m
+
+      - name: Report Keycloak deployment status
+        if: always()
+        run: |
+          NAMESPACE="${{ inputs.namespace }}"
+          echo "=== Keycloak Pod Status ==="
+          kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=keycloak

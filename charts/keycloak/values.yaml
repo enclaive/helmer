@@ -1,0 +1,3 @@
+# empty or basic defaults
+replicaCount: 1
+production: true

@@ -14,7 +14,7 @@ spec:
       shared_buffers: 256MB
   primaryUpdateStrategy: unsupervised
   storage:
-    storageClass: longhorn
+    storageClass: gp3
     size: 8Gi
   enableSuperuserAccess: true
   superuserSecret:
