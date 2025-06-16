@@ -53,15 +53,6 @@ jobs:
           namespace: ${{ inputs.namespace }}
           secret-name: aws-ecr-creds
 
-      - name: Deploy CNPG Cluster and Backups
-        run: |
-          echo "Applying CNPG cluster and backups for Keycloak..."
-
-          kubectl apply -f charts/keycloak/k8s/dev/keycloakCNPGCluster.yaml 
-          kubectl apply -f charts/keycloak/k8s/dev/keycloakCNPGClusterInstantBackup.yaml 
-          kubectl apply -f charts/keycloak/k8s/dev/keycloakCNPGClusterScheduledBackup.yaml
-
-          echo " CNPG Cluster and backup resources applied"
       - name: Set Keycloak image tag
         id: set-tag
         run: |
