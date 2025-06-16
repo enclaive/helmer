@@ -120,7 +120,7 @@ jobs:
           export KEYCLOAK_IMAGE_TAG="${{ steps.set-tag.outputs.keycloak_tag }}"
           
           # Use sync instead of apply to avoid diff issues, or use --skip-diff-on-install
-          helmfile sync --set server.image.repository=$KEYCLOAK_IMAGE_REPOSITORY --set server.image.tag=$KEYCLOAK_IMAGE_TAG
+          helmfile sync --set image.repository=$KEYCLOAK_IMAGE_REPOSITORY --set image.tag=$KEYCLOAK_IMAGE_TAG
       
       - name: Report Keycloak deployment status
         if: always()

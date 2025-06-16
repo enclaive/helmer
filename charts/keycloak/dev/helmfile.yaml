@@ -32,9 +32,8 @@ releases:
           tls: true
 
         image:
-          registry: ${{ env "AWS_ACCOUNT_ID" }}.dkr.ecr.eu-central-1.amazonaws.com
-          repository: kc-provider
-          tag: dev
+          repository: ""
+          tag: ""
           pullPolicy: IfNotPresent
 
         extraStartupArgs: "--spi-email-template-provider=custom-freemarker"
