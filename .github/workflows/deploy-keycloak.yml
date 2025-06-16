@@ -96,23 +96,32 @@ jobs:
           echo "log_level=$LOG_LEVEL" >> $GITHUB_OUTPUT
           echo "log_format=$LOG_FORMAT" >> $GITHUB_OUTPUT
 
-      - name: Deploy Keycloak using Helm
-        uses: ./.github/actions/deploy-helm-chart
-        with:
-          service-name: keycloak
-          chart-path: ./charts/keycloak
-          values-file: ./charts/keycloak/environments/values.${{ inputs.environment }}.yaml
-          namespace: ${{ inputs.namespace }}
-          environment: ${{ inputs.environment }}
-          image-repository: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/kc-provider
-          image-tag: ${{ steps.set-tag.outputs.keycloak_tag }}
-          additional-set-values: >-
-            --set namespace=${{ inputs.namespace }}
-            --set environment=${{ inputs.environment }}
-            --set logging.level=${{ steps.log-settings.outputs.log_level }}
-            --set logging.format=${{ steps.log-settings.outputs.log_format }}
-          timeout: 10m
+      - name: Install Helmfile and required plugins
+        run: |
+          # Install Helmfile
+          wget https://github.com/helmfile/helmfile/releases/download/v0.158.0/helmfile_0.158.0_linux_amd64.tar.gz
+          tar -xzf helmfile_0.158.0_linux_amd64.tar.gz
+          sudo mv helmfile /usr/local/bin/
+          chmod +x /usr/local/bin/helmfile
+          
+          # Install helm-diff plugin (required for helmfile)
+          helm plugin install https://github.com/databus23/helm-diff
+          
+          # Add Helm repos
+          helm repo add hashicorp https://helm.releases.hashicorp.com
+          helm repo update
 
+
+      - name: Deploy KEYCLOAK using Helmfile
+        working-directory: ./charts/keycloak/${{ inputs.environment }}
+        run: |
+          # Override image settings for ECR
+          export KEYCLOAK_IMAGE_REPOSITORY="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/kc-provider"
+          export KEYCLOAK_IMAGE_TAG="${{ steps.set-tag.outputs.keycloak_tag }}"
+          
+          # Use sync instead of apply to avoid diff issues, or use --skip-diff-on-install
+          helmfile sync --set server.image.repository=$KEYCLOAK_IMAGE_REPOSITORY --set server.image.tag=$KEYCLOAK_IMAGE_TAG
+      
       - name: Report Keycloak deployment status
         if: always()
         run: |

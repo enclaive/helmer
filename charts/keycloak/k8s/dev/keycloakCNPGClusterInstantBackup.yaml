@@ -1,8 +1,0 @@
-apiVersion: postgresql.cnpg.io/v1
-kind: Backup
-metadata:
-  name: keycloak-cnpg-cluster-instant-backup-v1
-spec:
-  method: barmanObjectStore
-  cluster:
-    name: keycloak-cnpg-cluster
